@@ -1,180 +1,102 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
-export default function LoginPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState({ type: '', text: '' });
-  const [isForgotPassword, setIsForgotPassword] = useState(false);
-  const router = useRouter();
+export default function DashboardPage() {
+  const [stats, setStats] = useState({
+    clientes: 0,
+    cotacoesAprovadas: 0,
+    veiculos: 0,
+    saldo: 0
+  });
+  const [loading, setLoading] = useState(true);
 
-  async function handleLogin(e) {
-    e.preventDefault();
-    if (!email || !password) {
-      showMessage('error', 'Preencha todos os campos.');
-      return;
+  useEffect(() => {
+    async function loadDashboard() {
+      try {
+        const { count: clientes } = await supabase.from('clientes').select('*', { count: 'exact', head: true });
+        const { count: entregas } = await supabase.from('cotacoes').select('*', { count: 'exact', head: true }).eq('status', 'Aprovada');
+        const { count: veiculos } = await supabase.from('veiculos').select('*', { count: 'exact', head: true });
+        
+        const { data: financeiro } = await supabase.from('financeiro').select('valor, tipo');
+        let saldoCalc = 0;
+        if (financeiro) {
+          financeiro.forEach(item => {
+            if (item.tipo === 'Entrada') saldoCalc += item.valor;
+            if (item.tipo === 'Saída') saldoCalc -= item.valor;
+          });
+        }
+
+        setStats({
+          clientes: clientes || 0,
+          cotacoesAprovadas: entregas || 0,
+          veiculos: veiculos || 0,
+          saldo: saldoCalc
+        });
+      } catch (error) {
+        console.error("Erro ao carregar dashboard:", error);
+      } finally {
+        setLoading(false);
+      }
     }
-
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) throw error;
-
-      showMessage('success', 'Login realizado com sucesso! Redirecionando...');
-      setTimeout(() => {
-        router.push('/');
-        router.refresh();
-      }, 1000);
-
-    } catch (error) {
-      showMessage('error', 'Erro ao fazer login. Verifique seu e-mail e senha.');
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handlePasswordReset(e) {
-    e.preventDefault();
-    if (!email) {
-      showMessage('error', 'Informe seu e-mail para recuperação.');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/login`,
-      });
-
-      if (error) throw error;
-
-      showMessage('success', 'Link de recuperação enviado para o seu e-mail!');
-      setIsForgotPassword(false);
-    } catch (error) {
-      showMessage('error', 'Erro ao enviar e-mail de recuperação. Verifique o endereço.');
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function showMessage(type, text) {
-    setMessage({ type, text });
-    setTimeout(() => setMessage({ type: '', text: '' }), 4000);
-  }
+    loadDashboard();
+  }, []);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-slate-950 px-4">
-      <div className="max-w-md w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl p-8 space-y-6">
-        
-        {/* Logo / Título */}
-        <div className="text-center space-y-2">
-          <div className="inline-flex w-16 h-16 bg-blue-600 rounded-2xl items-center justify-center text-white font-bold text-2xl shadow-lg shadow-blue-500/30 mb-2">
-            PS
-          </div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">PS LOGÍSTICA</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            {isForgotPassword ? 'Informe seu e-mail para redefinir a senha' : 'Entre com sua conta para acessar o sistema'}
-          </p>
-        </div>
-
-        {/* Mensagem de Erro/Sucesso */}
-        {message.text && (
-          <div className={`p-4 rounded-xl text-sm border ${message.type === 'success' ? 'bg-emerald-50 dark:bg-emerald-950 border-emerald-200 dark:border-emerald-700 text-emerald-800 dark:text-emerald-200' : 'bg-rose-50 dark:bg-red-950 border-rose-200 dark:border-red-700 text-rose-800 dark:text-red-200'}`}>
-            {message.text}
-          </div>
-        )}
-
-        {/* Formulário de Login ou Recuperação */}
-        {!isForgotPassword ? (
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">E-mail</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="seu.email@pslog.com"
-                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm"
-                required
-              />
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Senha</label>
-                <button
-                  type="button"
-                  onClick={() => setIsForgotPassword(true)}
-                  className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-medium cursor-pointer"
-                >
-                  Esqueceu a senha?
-                </button>
-              </div>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm"
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-xl font-bold transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50 text-sm mt-2 cursor-pointer"
-            >
-              {loading ? 'Entrando...' : 'Acessar Sistema'}
-            </button>
-          </form>
-        ) : (
-          <form onSubmit={handlePasswordReset} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">E-mail cadastrado</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="seu.email@pslog.com"
-                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm"
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-xl font-bold transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50 text-sm mt-2 cursor-pointer"
-            >
-              {loading ? 'Enviando...' : 'Enviar Link de Recuperação'}
-            </button>
-
-            <div className="text-center pt-2">
-              <button
-                type="button"
-                onClick={() => setIsForgotPassword(false)}
-                className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium cursor-pointer"
-              >
-                ← Voltar para o Login
-              </button>
-            </div>
-          </form>
-        )}
-
-        <div className="text-center pt-2 border-t border-slate-100 dark:border-slate-800">
-          <p className="text-xs text-slate-400">Sistema Restrito a Funcionários e Administradores</p>
-        </div>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Dashboard</h1>
+        <p className="text-slate-500 dark:text-slate-400 mt-1">Bem-vindo ao PS Logística. Aqui está o resumo das suas operações.</p>
       </div>
+
+      {loading ? (
+        <div className="flex justify-center p-12">
+          <div className="text-slate-400 animate-pulse">Carregando painel...</div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Clientes Ativos</p>
+              <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center text-lg">👥</div>
+            </div>
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{stats.clientes}</h3>
+            <Link href="/clientes" className="text-xs text-blue-600 dark:text-blue-400 mt-2 block hover:underline">Ver clientes →</Link>
+          </div>
+
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Entregas Ativas</p>
+              <div className="w-10 h-10 bg-amber-100 dark:bg-amber-900/30 rounded-lg flex items-center justify-center text-lg">🚚</div>
+            </div>
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{stats.cotacoesAprovadas}</h3>
+            <Link href="/entregas" className="text-xs text-amber-600 dark:text-amber-400 mt-2 block hover:underline">Acompanhar entregas →</Link>
+          </div>
+
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Frota</p>
+              <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center text-lg">🚛</div>
+            </div>
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{stats.veiculos}</h3>
+            <Link href="/veiculos" className="text-xs text-purple-600 dark:text-purple-400 mt-2 block hover:underline">Gerenciar frota →</Link>
+          </div>
+
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Saldo Atual</p>
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-lg ${stats.saldo >= 0 ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-rose-100 dark:bg-rose-900/30'}`}>💰</div>
+            </div>
+            <h3 className={`text-2xl font-bold ${stats.saldo >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+              R$ {stats.saldo.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </h3>
+            <Link href="/financeiro" className="text-xs text-emerald-600 dark:text-emerald-400 mt-2 block hover:underline">Ver financeiro →</Link>
+          </div>
+
+        </div>
+      )}
     </div>
   );
 }
