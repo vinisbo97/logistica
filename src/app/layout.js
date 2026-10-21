@@ -9,7 +9,9 @@ export default function RootLayout({ children }) {
   const [theme, setTheme] = useState('light');
   const [empresa, setEmpresa] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userEmail, setUserEmail] = useState('');
   const [sessionChecked, setSessionChecked] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
 
@@ -21,29 +23,38 @@ export default function RootLayout({ children }) {
 
   useEffect(() => {
     async function checkAuth() {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session) {
-        setIsAuthenticated(true);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
         const { data } = await supabase.from('configuracoes_empresa').select('*').limit(1).maybeSingle();
         if (data) setEmpresa(data);
-      } else {
-        setIsAuthenticated(false);
-        if (pathname !== '/login') {
-          router.push('/login');
+
+        if (session) {
+          setIsAuthenticated(true);
+          setUserEmail(session.user?.email || 'Administrador');
+        } else {
+          setIsAuthenticated(false);
+          // Permite visitar a página inicial pública (/) e /login sem redirecionar
+          if (pathname !== '/' && pathname !== '/login') {
+            router.push('/');
+          }
         }
+      } catch (err) {
+        console.error('Erro ao verificar sessão:', err);
+      } finally {
+        setSessionChecked(true);
       }
-      setSessionChecked(true);
     }
     checkAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session) {
         setIsAuthenticated(true);
+        setUserEmail(session.user?.email || 'Administrador');
       } else {
         setIsAuthenticated(false);
-        if (pathname !== '/login') {
-          router.push('/login');
+        setUserEmail('');
+        if (pathname !== '/' && pathname !== '/login') {
+          router.push('/');
         }
       }
     });
@@ -60,141 +71,217 @@ export default function RootLayout({ children }) {
 
   const isDark = theme === 'dark';
 
-  // Se for a página de login, renderiza apenas o login isolado
+  const navItems = [
+    { href: '/', label: 'Painel Executivo', icon: '📊', group: 'Geral' },
+    { href: '/cotacoes', label: 'Cotações & Fretes', icon: '📋', group: 'Operação TMS' },
+    { href: '/entregas', label: 'Torre de Entregas', icon: '🚚', group: 'Operação TMS' },
+    { href: '/clientes', label: 'Clientes & Embarcadores', icon: '🏢', group: 'Cadastros' },
+    { href: '/motoristas', label: 'Motoristas & Agregados', icon: '🪪', group: 'Cadastros' },
+    { href: '/veiculos', label: 'Frota & Manutenção', icon: '🚛', group: 'Frota' },
+    { href: '/produtos', label: 'Almoxarifado & Peças', icon: '📦', group: 'Frota' },
+    { href: '/financeiro', label: 'Pagar & Receber', icon: '💰', group: 'Financeiro ERP' },
+    { href: '/relatorios', label: 'DRE & Relatórios BI', icon: '📈', group: 'Financeiro ERP' },
+    { href: '/configuracoes', label: 'Empresa & Parâmetros', icon: '⚙️', group: 'Sistema' },
+  ];
+
+  // Página de login dedicada
   if (pathname === '/login') {
     return (
       <html lang="pt-BR" data-theme={theme}>
         <head>
+          <title>Acesso ao Sistema | PS Logística ERP</title>
           <link rel="preconnect" href="https://fonts.googleapis.com" />
           <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-          <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+          <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
         </head>
-        <body className="bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 h-screen overflow-hidden font-sans">
+        <body className="bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen font-sans">
           {children}
         </body>
       </html>
     );
   }
 
-  // Enquanto verifica a sessão, mostra apenas uma tela de carregamento limpa (bloqueia o dashboard)
+  // Enquanto verifica a sessão
   if (!sessionChecked) {
     return (
       <html lang="pt-BR" data-theme={theme}>
-        <body className="bg-slate-50 dark:bg-slate-950 flex items-center justify-center h-screen font-sans">
-          <div className="text-slate-400 animate-pulse text-sm">Carregando PS Logística...</div>
+        <head>
+          <title>PS Logística & Transportes</title>
+        </head>
+        <body className="bg-slate-950 flex items-center justify-center h-screen font-sans">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center text-white font-bold text-xl animate-bounce shadow-lg shadow-blue-500/30">
+              PS
+            </div>
+            <div className="text-slate-400 animate-pulse text-sm">Carregando plataforma PS Logística...</div>
+          </div>
         </body>
       </html>
     );
   }
 
-  // Se não estiver autenticado, bloqueia a exibição do painel e redireciona
+  // Se NÃO estiver autenticado e estiver na página inicial (/), exibe a Landing Page comercial sem a barra lateral do ERP
   if (!isAuthenticated) {
     return (
       <html lang="pt-BR" data-theme={theme}>
-        <body className="bg-slate-50 dark:bg-slate-950 flex items-center justify-center h-screen font-sans">
-          <div className="text-slate-400 animate-pulse text-sm">Redirecionando para o login...</div>
+        <head>
+          <title>{empresa?.nome_fantasia || 'PS Logística & Transportes'} | Soluções em Transporte Rodoviário e Logística</title>
+          <link rel="preconnect" href="https://fonts.googleapis.com" />
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+          <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+        </head>
+        <body className="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen font-sans overflow-x-hidden">
+          {children}
         </body>
       </html>
     );
   }
 
-  // Se estiver autenticado, renderiza o sistema completo normalmente
+  // Se estiver autenticado, renderiza o ERP completo com Sidebar e Header
   return (
     <html lang="pt-BR" data-theme={theme}>
       <head>
+        <title>{empresa?.nome_fantasia || 'PS LOGÍSTICA'} | ERP & TMS de Gestão de Transportes</title>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
       </head>
-      <body className="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 h-screen overflow-hidden font-sans">
-        
+      <body className="bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 h-screen overflow-hidden font-sans">
         <div className="flex h-full">
-          
           {/* SIDEBAR */}
-          <aside className="w-[280px] bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col shadow-sm z-10">
-            
-            <div className="p-6 border-b border-slate-200 dark:border-slate-800">
-              <div className="flex items-center gap-3">
+          <aside className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 fixed lg:static inset-y-0 left-0 w-[280px] bg-slate-900 text-white border-r border-slate-800 flex flex-col shadow-xl z-40 transition-transform duration-200`}>
+            <div className="p-5 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-3 min-w-0">
                 {empresa?.logo_url ? (
-                  <div className="w-12 h-12 rounded-xl flex items-center justify-center overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex-shrink-0 shadow-sm">
+                  <div className="w-11 h-11 rounded-xl flex items-center justify-center overflow-hidden bg-slate-800 border border-slate-700 flex-shrink-0">
                     <img src={empresa.logo_url} alt="Logo" className="w-full h-full object-contain p-1" />
                   </div>
                 ) : (
-                  <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-blue-500/30 flex-shrink-0">
+                  <div className="w-11 h-11 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-extrabold text-lg shadow-lg shadow-blue-500/30 flex-shrink-0">
                     {empresa?.nome_fantasia ? empresa.nome_fantasia.substring(0, 2).toUpperCase() : 'PS'}
                   </div>
                 )}
                 <div className="min-w-0 flex-1">
-                  <h1 className="m-0 text-base font-bold text-slate-900 dark:text-white truncate">
+                  <h1 className="m-0 text-sm font-extrabold text-white truncate tracking-wide">
                     {empresa?.nome_fantasia || 'PS LOGÍSTICA'}
                   </h1>
-                  <p className="m-0 text-xs text-slate-500 dark:text-slate-400 truncate">Gestão de Transportes</p>
+                  <p className="m-0 text-[11px] text-blue-400 font-medium truncate">ERP & TMS Corporativo</p>
                 </div>
               </div>
+              <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-slate-400 hover:text-white p-1">
+                ✕
+              </button>
             </div>
-            
-            {/* NAV */}
-            <nav className="flex-1 p-6 space-y-1 overflow-y-auto">
-              {[
-                { href: '/', label: 'Dashboard', icon: '🏠' },
-                { href: '/clientes', label: 'Clientes', icon: '👥' },
-                { href: '/cotacoes', label: 'Cotações', icon: '📄' },
-                { href: '/financeiro', label: 'Financeiro', icon: '💰' },
-                { href: '/relatorios', label: 'Relatórios', icon: '📊' },
-                { href: '/entregas', label: 'Entregas', icon: '🚚' },
-                { href: '/veiculos', label: 'Veículos', icon: '🚛' },
-                { href: '/configuracoes', label: 'Configurações', icon: '⚙️' },
-              ].map((item) => (
-                <Link key={item.href} href={item.href} className="flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-blue-600 dark:hover:text-blue-400 transition-all">
-                  <span className="text-lg">{item.icon}</span>
-                  <span>{item.label}</span>
-                </Link>
-              ))}
+
+            {/* NAVEGAÇÃO AGRUPADA */}
+            <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
+              {navItems.map((item, idx) => {
+                const showGroup = idx === 0 || navItems[idx - 1].group !== item.group;
+                const isActive = pathname === item.href;
+                return (
+                  <div key={item.href}>
+                    {showGroup && (
+                      <p className="px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                        {item.group}
+                      </p>
+                    )}
+                    <Link
+                      href={item.href}
+                      onClick={() => setSidebarOpen(false)}
+                      className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                        isActive
+                          ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                          : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
+                      }`}
+                    >
+                      <span className="text-base">{item.icon}</span>
+                      <span>{item.label}</span>
+                    </Link>
+                  </div>
+                );
+              })}
             </nav>
-            
-            <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
-              <span className="text-xs text-slate-400">v1.3.0</span>
-              <button 
+
+            <div className="p-4 border-t border-slate-800 bg-slate-950/50 space-y-2">
+              <div className="flex items-center justify-between text-xs text-slate-400">
+                <span>Versão 2.0 ERP</span>
+                <span className="inline-flex items-center gap-1 text-emerald-400 font-medium">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Online
+                </span>
+              </div>
+              <button
                 onClick={async () => {
                   await supabase.auth.signOut();
-                  router.push('/login');
+                  setIsAuthenticated(false);
+                  router.push('/');
                 }}
-                className="text-xs font-semibold text-rose-500 hover:text-rose-600 cursor-pointer transition-colors"
+                className="w-full py-2 px-3 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-bold cursor-pointer transition-all flex items-center justify-center gap-2"
               >
-                Sair do Sistema
+                <span>🚪</span> Encerrar Sessão (Ver Site Público)
               </button>
             </div>
           </aside>
 
-          {/* CONTENT AREA */}
+          {/* CONTEÚDO PRINCIPAL */}
           <div className="flex-1 flex flex-col min-w-0">
-            
             {/* HEADER */}
-            <header className="h-20 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-8 shadow-xs">
-              <div className="flex-1">
-                <h2 className="m-0 text-sm font-medium text-slate-500 dark:text-slate-400">Painel de Controle</h2>
+            <header className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 lg:px-8 shadow-xs">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setSidebarOpen(true)}
+                  className="lg:hidden p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300"
+                >
+                  ☰
+                </button>
+                <div>
+                  <h2 className="m-0 text-sm font-bold text-slate-800 dark:text-slate-100">
+                    {navItems.find((i) => i.href === pathname)?.label || 'Central de Operações'}
+                  </h2>
+                  <p className="m-0 text-[11px] text-slate-400 hidden sm:block">
+                    Gestão integrada de fretes, frota, motoristas e financeiro
+                  </p>
+                </div>
               </div>
-              
-              <div className="flex items-center gap-6">
-                <button onClick={toggleTheme} className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 cursor-pointer text-base hover:bg-slate-100 dark:hover:bg-slate-700 transition-all">
+
+              <div className="flex items-center gap-3 sm:gap-5">
+                <Link
+                  href="/cotacoes"
+                  className="hidden md:inline-flex items-center gap-1.5 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                >
+                  + Nova Cotação
+                </Link>
+                <Link
+                  href="/financeiro"
+                  className="hidden md:inline-flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                >
+                  $ Contas Pagar/Receber
+                </Link>
+
+                <button
+                  onClick={toggleTheme}
+                  title="Alternar tema claro/escuro"
+                  className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 cursor-pointer text-sm hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
+                >
                   {isDark ? '☀️' : '🌙'}
                 </button>
-                
-                <div className="flex items-center gap-3 pl-6 border-l border-slate-200 dark:border-slate-700">
-                  <div className="text-right">
-                    <p className="m-0 text-sm font-bold text-slate-900 dark:text-white">Administrador</p>
-                    <p className="m-0 text-xs text-emerald-500 font-medium">Online</p>
+
+                <div className="flex items-center gap-3 pl-4 border-l border-slate-200 dark:border-slate-700">
+                  <div className="text-right hidden sm:block">
+                    <p className="m-0 text-xs font-bold text-slate-900 dark:text-white truncate max-w-[160px]">
+                      {userEmail}
+                    </p>
+                    <p className="m-0 text-[11px] text-emerald-500 font-medium">Acesso Total ERP</p>
                   </div>
-                  <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold shadow-md">
+                  <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-xs shadow-md">
                     {empresa?.nome_fantasia ? empresa.nome_fantasia.substring(0, 2).toUpperCase() : 'PS'}
                   </div>
                 </div>
               </div>
             </header>
-            
-            {/* MAIN */}
-            <main className="flex-1 p-8 overflow-y-auto bg-slate-100 dark:bg-slate-950">
-              <div className="max-w-6xl mx-auto">
+
+            {/* ÁREA DE CONTEÚDO */}
+            <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto bg-slate-100 dark:bg-slate-950">
+              <div className="max-w-7xl mx-auto">
                 {children}
               </div>
             </main>
