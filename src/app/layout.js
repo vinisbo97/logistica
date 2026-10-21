@@ -12,7 +12,6 @@ export default function RootLayout({ children }) {
   const [userEmail, setUserEmail] = useState('');
   const [sessionChecked, setSessionChecked] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [isSitePreview, setIsSitePreview] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
 
@@ -21,13 +20,6 @@ export default function RootLayout({ children }) {
     setTheme(savedTheme);
     document.documentElement.setAttribute('data-theme', savedTheme);
   }, []);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      setIsSitePreview(pathname === '/' && params.get('site') === '1');
-    }
-  }, [pathname]);
 
   useEffect(() => {
     async function checkAuth() {
@@ -41,8 +33,9 @@ export default function RootLayout({ children }) {
           setUserEmail(session.user?.email || 'Administrador');
         } else {
           setIsAuthenticated(false);
+          // Somente páginas internas do ERP redirecionam para /login
           if (pathname !== '/' && pathname !== '/login') {
-            router.push('/');
+            router.push('/login');
           }
         }
       } catch (err) {
@@ -61,7 +54,7 @@ export default function RootLayout({ children }) {
         setIsAuthenticated(false);
         setUserEmail('');
         if (pathname !== '/' && pathname !== '/login') {
-          router.push('/');
+          router.push('/login');
         }
       }
     });
@@ -79,7 +72,7 @@ export default function RootLayout({ children }) {
   const isDark = theme === 'dark';
 
   const navItems = [
-    { href: '/', label: 'Painel Executivo', icon: '📊', group: 'Visão Geral' },
+    { href: '/dashboard', label: 'Painel Executivo', icon: '📊', group: 'Visão Geral' },
     { href: '/cotacoes', label: 'Cotações & Fretes', icon: '📋', group: 'Operação TMS' },
     { href: '/entregas', label: 'Torre de Entregas', icon: '🚚', group: 'Operação TMS' },
     { href: '/clientes', label: 'Clientes & Embarcadores', icon: '🏢', group: 'Cadastros' },
@@ -102,7 +95,22 @@ export default function RootLayout({ children }) {
     </>
   );
 
-  // Página de login dedicada
+  // 1. PÁGINA INICIAL PÚBLICA DE MARKETING (/) — SEMPRE ACESSÍVEL IMEDIATAMENTE SEM BLOQUEIO DE SESSÃO
+  if (pathname === '/') {
+    return (
+      <html lang="pt-BR" data-theme={theme}>
+        <head>
+          <title>{empresa?.nome_fantasia || 'PS Logística & Transportes'} | Transporte Rodoviário e Logística Integrada</title>
+          {fontHead}
+        </head>
+        <body className="bg-[#060B18] text-slate-100 min-h-screen font-sans overflow-x-hidden">
+          {children}
+        </body>
+      </html>
+    );
+  }
+
+  // 2. PÁGINA DE LOGIN (/login) — CHAMADA QUANDO CLICA NO BOTÃO DE LOGIN NO TOPO DA TELA PRINCIPAL
   if (pathname === '/login') {
     return (
       <html lang="pt-BR" data-theme={theme}>
@@ -117,12 +125,12 @@ export default function RootLayout({ children }) {
     );
   }
 
-  // Enquanto verifica a sessão
-  if (!sessionChecked) {
+  // 3. PÁGINAS INTERNAS DO ERP (/dashboard, /financeiro, /cotacoes, etc.)
+  if (!sessionChecked || !isAuthenticated) {
     return (
       <html lang="pt-BR" data-theme={theme}>
         <head>
-          <title>PS Logística & Transportes</title>
+          <title>PS Logística ERP</title>
           {fontHead}
         </head>
         <body className="bg-[#060B18] flex items-center justify-center h-screen font-sans">
@@ -130,29 +138,13 @@ export default function RootLayout({ children }) {
             <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-black text-xl animate-bounce shadow-lg shadow-blue-500/30">
               PS
             </div>
-            <div className="text-slate-400 animate-pulse text-sm">Carregando PS Logística...</div>
+            <div className="text-slate-400 animate-pulse text-sm">Verificando credenciais do ERP...</div>
           </div>
         </body>
       </html>
     );
   }
 
-  // Se NÃO estiver autenticado OU estiver vendo o site público (?site=1), exibe a página institucional sem barra lateral
-  if (!isAuthenticated || isSitePreview) {
-    return (
-      <html lang="pt-BR" data-theme={theme}>
-        <head>
-          <title>{empresa?.nome_fantasia || 'PS Logística & Transportes'} | Transporte Rodoviário e Logística Integrada</title>
-          {fontHead}
-        </head>
-        <body className="bg-[#060B18] text-slate-100 min-h-screen font-sans overflow-x-hidden">
-          {children}
-        </body>
-      </html>
-    );
-  }
-
-  // Se estiver autenticado, renderiza o ERP completo com Sidebar e Header
   return (
     <html lang="pt-BR" data-theme={theme}>
       <head>
@@ -216,12 +208,12 @@ export default function RootLayout({ children }) {
             </nav>
 
             <div className="p-4 border-t border-slate-800/80 bg-[#030711] space-y-2">
-              <a
-                href="/?site=1"
+              <Link
+                href="/"
                 className="w-full py-2 px-3 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 text-xs font-bold transition-all flex items-center justify-center gap-2"
               >
-                <span>🌐</span> Ver Site de Marketing
-              </a>
+                <span>🌐</span> Ir para o Site Principal
+              </Link>
               <button
                 onClick={async () => {
                   await supabase.auth.signOut();

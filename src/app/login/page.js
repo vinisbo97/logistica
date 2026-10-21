@@ -37,7 +37,7 @@ export default function LoginPage() {
 
       showMessage('success', 'Autenticação confirmada! Acessando o Painel ERP...');
       setTimeout(() => {
-        router.push('/');
+        router.push('/dashboard');
         router.refresh();
       }, 700);
     } catch (error) {
@@ -96,7 +96,7 @@ export default function LoginPage() {
 
         {/* TOPO DA IMAGEM */}
         <div className="relative z-10 flex items-center justify-between">
-          <Link href="/?site=1" className="flex items-center gap-3 group">
+          <Link href="/" className="flex items-center gap-3 group">
             <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-black text-xl shadow-lg shadow-blue-600/30">
               PS
             </div>
@@ -107,7 +107,7 @@ export default function LoginPage() {
           </Link>
 
           <Link
-            href="/?site=1"
+            href="/"
             className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 backdrop-blur-md border border-white/15 text-xs font-bold text-white transition-all"
           >
             ← Voltar ao Site Institucional
@@ -138,7 +138,7 @@ export default function LoginPage() {
         <div className="max-w-md w-full mx-auto space-y-8">
           <div className="flex items-center justify-between lg:hidden pb-4 border-b border-white/10">
             <span className="font-black text-lg text-white">{nomeEmpresa}</span>
-            <Link href="/?site=1" className="text-xs text-blue-400 font-bold hover:underline">
+            <Link href="/" className="text-xs text-blue-400 font-bold hover:underline">
               ← Voltar ao Site
             </Link>
           </div>
@@ -242,7 +242,7 @@ export default function LoginPage() {
 
           <div className="pt-6 border-t border-white/10 flex items-center justify-between text-xs text-slate-500">
             <span>🔒 Ambiente Criptografado</span>
-            <Link href="/?site=1" className="text-blue-400 hover:underline font-semibold">
+            <Link href="/" className="text-blue-400 hover:underline font-semibold">
               Ir para o Site Público
             </Link>
           </div>
