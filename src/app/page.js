@@ -367,7 +367,7 @@ export default function LandingPage() {
             <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm hover:shadow-xl transition-all flex flex-col">
               <div className="h-64 overflow-hidden bg-slate-100 relative flex items-center justify-center">
                 <img
-                  src="https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=900&q=80"
+                  src="/fiat-strada.png"
                   alt="Utilitários Fiat Strada para Pequenos Fretes"
                   className="w-full h-full object-cover hover:scale-105 transition-transform duration-500"
                 />
