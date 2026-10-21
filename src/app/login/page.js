@@ -78,8 +78,8 @@ export default function LoginPage() {
   }
 
   const nomeEmpresa = empresa?.nome_fantasia || 'PS LOGÍSTICA';
-  const telEmpresa = empresa?.telefone || '(11) 98765-4321';
-  const emailEmpresa = empresa?.email || 'comercial@pslogistica.com.br';
+  const telEmpresa = 'Em manutenção';
+  const emailEmpresa = 'Em manutenção';
 
   return (
     <div className="min-h-screen grid grid-cols-1 lg:grid-cols-12 bg-[#060B18] text-white">
@@ -87,8 +87,8 @@ export default function LoginPage() {
       <div className="hidden lg:flex lg:col-span-7 relative overflow-hidden flex-col justify-between p-12 border-r border-white/10">
         <div className="absolute inset-0 z-0">
           <img
-            src="https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?auto=format&fit=crop&w=1800&q=85"
-            alt="Caminhão PS Logística"
+            src="/caminhao-mb914.webp"
+            alt="Caminhão Mercedes-Benz 914 Carroceria PS Logística"
             className="w-full h-full object-cover object-center"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-[#060B18] via-[#060B18]/75 to-[#060B18]/50" />
