@@ -12,6 +12,7 @@ export default function RootLayout({ children }) {
   const [userEmail, setUserEmail] = useState('');
   const [sessionChecked, setSessionChecked] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isSitePreview, setIsSitePreview] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
 
@@ -20,6 +21,13 @@ export default function RootLayout({ children }) {
     setTheme(savedTheme);
     document.documentElement.setAttribute('data-theme', savedTheme);
   }, []);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      setIsSitePreview(pathname === '/' && params.get('site') === '1');
+    }
+  }, [pathname]);
 
   useEffect(() => {
     async function checkAuth() {
@@ -33,7 +41,6 @@ export default function RootLayout({ children }) {
           setUserEmail(session.user?.email || 'Administrador');
         } else {
           setIsAuthenticated(false);
-          // Permite visitar a página inicial pública (/) e /login sem redirecionar
           if (pathname !== '/' && pathname !== '/login') {
             router.push('/');
           }
@@ -72,29 +79,38 @@ export default function RootLayout({ children }) {
   const isDark = theme === 'dark';
 
   const navItems = [
-    { href: '/', label: 'Painel Executivo', icon: '📊', group: 'Geral' },
+    { href: '/', label: 'Painel Executivo', icon: '📊', group: 'Visão Geral' },
     { href: '/cotacoes', label: 'Cotações & Fretes', icon: '📋', group: 'Operação TMS' },
     { href: '/entregas', label: 'Torre de Entregas', icon: '🚚', group: 'Operação TMS' },
     { href: '/clientes', label: 'Clientes & Embarcadores', icon: '🏢', group: 'Cadastros' },
     { href: '/motoristas', label: 'Motoristas & Agregados', icon: '🪪', group: 'Cadastros' },
-    { href: '/veiculos', label: 'Frota & Manutenção', icon: '🚛', group: 'Frota' },
-    { href: '/produtos', label: 'Almoxarifado & Peças', icon: '📦', group: 'Frota' },
-    { href: '/financeiro', label: 'Pagar & Receber', icon: '💰', group: 'Financeiro ERP' },
+    { href: '/veiculos', label: 'Frota & Manutenção', icon: '🚛', group: 'Gestão de Frota' },
+    { href: '/produtos', label: 'Almoxarifado & Peças', icon: '📦', group: 'Gestão de Frota' },
+    { href: '/financeiro', label: 'Contas a Pagar & Receber', icon: '💰', group: 'Financeiro ERP' },
     { href: '/relatorios', label: 'DRE & Relatórios BI', icon: '📈', group: 'Financeiro ERP' },
-    { href: '/configuracoes', label: 'Empresa & Parâmetros', icon: '⚙️', group: 'Sistema' },
+    { href: '/configuracoes', label: 'Empresa & Parâmetros', icon: '⚙️', group: 'Sistema' }
   ];
+
+  const fontHead = (
+    <>
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      <link
+        href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet"
+      />
+    </>
+  );
 
   // Página de login dedicada
   if (pathname === '/login') {
     return (
       <html lang="pt-BR" data-theme={theme}>
         <head>
-          <title>Acesso ao Sistema | PS Logística ERP</title>
-          <link rel="preconnect" href="https://fonts.googleapis.com" />
-          <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-          <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+          <title>Acesso ao Portal ERP | PS Logística</title>
+          {fontHead}
         </head>
-        <body className="bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen font-sans">
+        <body className="bg-[#060B18] text-white min-h-screen font-sans">
           {children}
         </body>
       </html>
@@ -107,30 +123,29 @@ export default function RootLayout({ children }) {
       <html lang="pt-BR" data-theme={theme}>
         <head>
           <title>PS Logística & Transportes</title>
+          {fontHead}
         </head>
-        <body className="bg-slate-950 flex items-center justify-center h-screen font-sans">
+        <body className="bg-[#060B18] flex items-center justify-center h-screen font-sans">
           <div className="flex flex-col items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center text-white font-bold text-xl animate-bounce shadow-lg shadow-blue-500/30">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-black text-xl animate-bounce shadow-lg shadow-blue-500/30">
               PS
             </div>
-            <div className="text-slate-400 animate-pulse text-sm">Carregando plataforma PS Logística...</div>
+            <div className="text-slate-400 animate-pulse text-sm">Carregando PS Logística...</div>
           </div>
         </body>
       </html>
     );
   }
 
-  // Se NÃO estiver autenticado e estiver na página inicial (/), exibe a Landing Page comercial sem a barra lateral do ERP
-  if (!isAuthenticated) {
+  // Se NÃO estiver autenticado OU estiver vendo o site público (?site=1), exibe a página institucional sem barra lateral
+  if (!isAuthenticated || isSitePreview) {
     return (
       <html lang="pt-BR" data-theme={theme}>
         <head>
-          <title>{empresa?.nome_fantasia || 'PS Logística & Transportes'} | Soluções em Transporte Rodoviário e Logística</title>
-          <link rel="preconnect" href="https://fonts.googleapis.com" />
-          <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-          <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+          <title>{empresa?.nome_fantasia || 'PS Logística & Transportes'} | Transporte Rodoviário e Logística Integrada</title>
+          {fontHead}
         </head>
-        <body className="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen font-sans overflow-x-hidden">
+        <body className="bg-[#060B18] text-slate-100 min-h-screen font-sans overflow-x-hidden">
           {children}
         </body>
       </html>
@@ -142,30 +157,28 @@ export default function RootLayout({ children }) {
     <html lang="pt-BR" data-theme={theme}>
       <head>
         <title>{empresa?.nome_fantasia || 'PS LOGÍSTICA'} | ERP & TMS de Gestão de Transportes</title>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+        {fontHead}
       </head>
       <body className="bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 h-screen overflow-hidden font-sans">
         <div className="flex h-full">
-          {/* SIDEBAR */}
-          <aside className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 fixed lg:static inset-y-0 left-0 w-[280px] bg-slate-900 text-white border-r border-slate-800 flex flex-col shadow-xl z-40 transition-transform duration-200`}>
-            <div className="p-5 border-b border-slate-800 flex items-center justify-between">
+          {/* SIDEBAR CORPORATIVA */}
+          <aside className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 fixed lg:static inset-y-0 left-0 w-[280px] bg-[#060B18] text-white border-r border-slate-800/80 flex flex-col shadow-2xl z-40 transition-transform duration-200`}>
+            <div className="p-5 border-b border-slate-800/80 flex items-center justify-between">
               <div className="flex items-center gap-3 min-w-0">
                 {empresa?.logo_url ? (
-                  <div className="w-11 h-11 rounded-xl flex items-center justify-center overflow-hidden bg-slate-800 border border-slate-700 flex-shrink-0">
+                  <div className="w-11 h-11 rounded-xl flex items-center justify-center overflow-hidden bg-slate-900 border border-slate-700 shrink-0">
                     <img src={empresa.logo_url} alt="Logo" className="w-full h-full object-contain p-1" />
                   </div>
                 ) : (
-                  <div className="w-11 h-11 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-extrabold text-lg shadow-lg shadow-blue-500/30 flex-shrink-0">
+                  <div className="w-11 h-11 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-black text-lg shadow-lg shadow-blue-500/30 shrink-0">
                     {empresa?.nome_fantasia ? empresa.nome_fantasia.substring(0, 2).toUpperCase() : 'PS'}
                   </div>
                 )}
                 <div className="min-w-0 flex-1">
-                  <h1 className="m-0 text-sm font-extrabold text-white truncate tracking-wide">
+                  <h1 className="m-0 text-sm font-black text-white truncate tracking-wide">
                     {empresa?.nome_fantasia || 'PS LOGÍSTICA'}
                   </h1>
-                  <p className="m-0 text-[11px] text-blue-400 font-medium truncate">ERP & TMS Corporativo</p>
+                  <p className="m-0 text-[11px] text-blue-400 font-semibold truncate">ERP & TMS Corporativo</p>
                 </div>
               </div>
               <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-slate-400 hover:text-white p-1">
@@ -188,10 +201,10 @@ export default function RootLayout({ children }) {
                     <Link
                       href={item.href}
                       onClick={() => setSidebarOpen(false)}
-                      className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                      className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
                         isActive
-                          ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
-                          : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
+                          ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/30'
+                          : 'text-slate-300 hover:bg-white/5 hover:text-white'
                       }`}
                     >
                       <span className="text-base">{item.icon}</span>
@@ -202,13 +215,13 @@ export default function RootLayout({ children }) {
               })}
             </nav>
 
-            <div className="p-4 border-t border-slate-800 bg-slate-950/50 space-y-2">
-              <div className="flex items-center justify-between text-xs text-slate-400">
-                <span>Versão 2.0 ERP</span>
-                <span className="inline-flex items-center gap-1 text-emerald-400 font-medium">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Online
-                </span>
-              </div>
+            <div className="p-4 border-t border-slate-800/80 bg-[#030711] space-y-2">
+              <a
+                href="/?site=1"
+                className="w-full py-2 px-3 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 text-xs font-bold transition-all flex items-center justify-center gap-2"
+              >
+                <span>🌐</span> Ver Site de Marketing
+              </a>
               <button
                 onClick={async () => {
                   await supabase.auth.signOut();
@@ -217,14 +230,13 @@ export default function RootLayout({ children }) {
                 }}
                 className="w-full py-2 px-3 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-bold cursor-pointer transition-all flex items-center justify-center gap-2"
               >
-                <span>🚪</span> Encerrar Sessão (Ver Site Público)
+                <span>🚪</span> Sair do ERP
               </button>
             </div>
           </aside>
 
           {/* CONTEÚDO PRINCIPAL */}
           <div className="flex-1 flex flex-col min-w-0">
-            {/* HEADER */}
             <header className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 lg:px-8 shadow-xs">
               <div className="flex items-center gap-3">
                 <button
@@ -234,7 +246,7 @@ export default function RootLayout({ children }) {
                   ☰
                 </button>
                 <div>
-                  <h2 className="m-0 text-sm font-bold text-slate-800 dark:text-slate-100">
+                  <h2 className="m-0 text-sm font-extrabold text-slate-800 dark:text-slate-100">
                     {navItems.find((i) => i.href === pathname)?.label || 'Central de Operações'}
                   </h2>
                   <p className="m-0 text-[11px] text-slate-400 hidden sm:block">
@@ -270,16 +282,15 @@ export default function RootLayout({ children }) {
                     <p className="m-0 text-xs font-bold text-slate-900 dark:text-white truncate max-w-[160px]">
                       {userEmail}
                     </p>
-                    <p className="m-0 text-[11px] text-emerald-500 font-medium">Acesso Total ERP</p>
+                    <p className="m-0 text-[11px] text-emerald-500 font-semibold">Administrador ERP</p>
                   </div>
-                  <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-xs shadow-md">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white flex items-center justify-center font-bold text-xs shadow-md">
                     {empresa?.nome_fantasia ? empresa.nome_fantasia.substring(0, 2).toUpperCase() : 'PS'}
                   </div>
                 </div>
               </div>
             </header>
 
-            {/* ÁREA DE CONTEÚDO */}
             <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto bg-slate-100 dark:bg-slate-950">
               <div className="max-w-7xl mx-auto">
                 {children}

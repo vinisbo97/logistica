@@ -2,27 +2,23 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
 
-export default function HomePage() {
+function HomeContent() {
   const [session, setSession] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [empresa, setEmpresa] = useState(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const verSitePublico = searchParams?.get('site') === '1';
 
-  // Estado do Login Discreto no Topo (Landing Page)
-  const [showTopLogin, setShowTopLogin] = useState(false);
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
-  const [loginLoading, setLoginLoading] = useState(false);
-  const [loginMsg, setLoginMsg] = useState('');
-
-  // Estado do Rastreamento Público (Landing Page)
+  // Estado do Rastreamento Público (Site institucional)
   const [trackingCode, setTrackingCode] = useState('');
   const [trackingResult, setTrackingResult] = useState(null);
   const [trackingSearched, setTrackingSearched] = useState(false);
 
-  // Estado do Formulário de Cotação Online (Landing Page)
+  // Estado do Formulário de Cotação Online (Site institucional)
   const [quoteForm, setQuoteForm] = useState({
     cliente: '',
     solicitante_telefone: '',
@@ -36,7 +32,7 @@ export default function HomePage() {
   const [quoteMsg, setQuoteMsg] = useState({ type: '', text: '' });
   const [quoteSending, setQuoteSending] = useState(false);
 
-  // Estado do Dashboard Executivo (quando logado)
+  // Estado do Dashboard Executivo ERP (quando logado)
   const [loadingDash, setLoadingDash] = useState(true);
   const [kpis, setKpis] = useState({
     clientes: 0,
@@ -124,7 +120,6 @@ export default function HomePage() {
         }
       });
 
-      // Gerar alertas inteligentes de documentos e financeiro
       const novosAlertas = [];
 
       listaVeiculos.forEach((v) => {
@@ -147,19 +142,21 @@ export default function HomePage() {
         }
       });
 
-      listaFin.filter(f => (f.status_pagamento === 'Pendente' || f.status_pagamento === 'Em Aberto') && (f.data_vencimento || f.data) <= hojeStr).forEach(f => {
-        novosAlertas.push({
-          tipo: 'critico',
-          titulo: `${f.tipo === 'Entrada' ? 'Recebimento' : 'Conta a Pagar'} em atraso/hoje`,
-          detalhe: `${f.descricao} - R$ ${Number(f.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-          link: '/financeiro'
+      listaFin
+        .filter((f) => (f.status_pagamento === 'Pendente' || f.status_pagamento === 'Em Aberto') && (f.data_vencimento || f.data) <= hojeStr)
+        .forEach((f) => {
+          novosAlertas.push({
+            tipo: 'critico',
+            titulo: `${f.tipo === 'Entrada' ? 'Recebimento' : 'Conta a Pagar'} vencendo/atrasado`,
+            detalhe: `${f.descricao} — R$ ${Number(f.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+            link: '/financeiro'
+          });
         });
-      });
 
       setKpis({
         clientes: listaClientes.length,
-        viagensAtivas: listaCotacoes.filter(c => c.status === 'Aprovada' && c.status_entrega !== 'Entregue').length,
-        cotacoesPendentes: listaCotacoes.filter(c => c.status === 'Pendente').length,
+        viagensAtivas: listaCotacoes.filter((c) => c.status === 'Aprovada' && c.status_entrega !== 'Entregue').length,
+        cotacoesPendentes: listaCotacoes.filter((c) => c.status === 'Pendente').length,
         veiculosTotal: listaVeiculos.length,
         motoristasTotal: listaMotoristas.length,
         saldoRealizado,
@@ -172,32 +169,13 @@ export default function HomePage() {
       setUltimasViagens(listaCotacoes.slice(0, 5));
       setProximosVencimentos(
         listaFin
-          .filter(f => f.status_pagamento === 'Pendente' || f.status_pagamento === 'Em Aberto')
+          .filter((f) => f.status_pagamento === 'Pendente' || f.status_pagamento === 'Em Aberto')
           .slice(0, 5)
       );
     } catch (error) {
       console.error('Erro ao carregar dashboard ERP:', error);
     } finally {
       setLoadingDash(false);
-    }
-  }
-
-  async function handleTopLogin(e) {
-    e.preventDefault();
-    setLoginLoading(true);
-    setLoginMsg('');
-    try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: loginEmail,
-        password: loginPassword
-      });
-      if (error) throw error;
-      setShowTopLogin(false);
-      router.refresh();
-    } catch (err) {
-      setLoginMsg('Credenciais inválidas. Verifique seu e-mail e senha.');
-    } finally {
-      setLoginLoading(false);
     }
   }
 
@@ -241,7 +219,7 @@ export default function HomePage() {
         destino: quoteForm.destino,
         tipo_veiculo: quoteForm.tipo_veiculo,
         peso_estimado: quoteForm.peso_estimado,
-        descricao: `${quoteForm.descricao || 'Solicitação via Portal Web'} | Contato: ${quoteForm.solicitante_email || '-'} / ${quoteForm.solicitante_telefone || '-'}`,
+        descricao: `${quoteForm.descricao || 'Solicitação via Site Oficial'} | Contato: ${quoteForm.solicitante_email || '-'} / ${quoteForm.solicitante_telefone || '-'}`,
         valor: 0,
         status: 'Pendente',
         status_entrega: 'Coletado'
@@ -249,7 +227,6 @@ export default function HomePage() {
 
       let { error } = await supabase.from('cotacoes').insert([payload]);
       if (error) {
-        // Fallback caso a coluna codigo_rastreio ainda não exista
         const { codigo_rastreio, ...fallbackPayload } = payload;
         const retry = await supabase.from('cotacoes').insert([fallbackPayload]);
         error = retry.error;
@@ -258,7 +235,7 @@ export default function HomePage() {
 
       setQuoteMsg({
         type: 'success',
-        text: `Solicitação enviada com sucesso! Protocolo de consulta: ${codigo}. Nossa equipe comercial entrará em contato.`
+        text: `Cotação registrada com sucesso! Seu protocolo de acompanhamento é ${codigo}. Nossa equipe comercial entrará em contato em instantes.`
       });
       setQuoteForm({
         cliente: '',
@@ -271,7 +248,7 @@ export default function HomePage() {
         descricao: ''
       });
     } catch (err) {
-      setQuoteMsg({ type: 'error', text: 'Não foi possível enviar sua cotação no momento. Tente novamente.' });
+      setQuoteMsg({ type: 'error', text: 'Não foi possível enviar sua cotação agora. Tente novamente.' });
     } finally {
       setQuoteSending(false);
     }
@@ -280,181 +257,211 @@ export default function HomePage() {
   if (!authChecked) return null;
 
   // ============================================================================
-  // VISÃO 1: LANDING PAGE COMERCIAL + LOGIN DISCRETO NO TOPO (VISITANTES)
+  // VISÃO 1: SITE INSTITUCIONAL E COMERCIAL DA PS LOGÍSTICA (VISITANTES OU MODO SITE)
   // ============================================================================
-  if (!session) {
-    const nomeEmpresa = empresa?.nome_fantasia || 'PS LOGÍSTICA & TRANSPORTES';
+  if (!session || verSitePublico) {
+    const nomeEmpresa = empresa?.nome_fantasia || 'PS LOGÍSTICA';
+    const razaoEmpresa = empresa?.razao_social || 'PS Logística & Transportes Rodoviários Ltda';
     const telEmpresa = empresa?.telefone || '(11) 98765-4321';
     const emailEmpresa = empresa?.email || 'comercial@pslogistica.com.br';
+    const enderecoEmpresa = empresa?.endereco
+      ? `${empresa.endereco} — ${empresa.cidade || 'São Paulo'}/${empresa.estado || 'SP'}`
+      : 'Av. das Nações Unidas, 1500 — Galpão Logístico 4, São Paulo/SP';
+    const cnpjEmpresa = empresa?.cnpj || '45.123.789/0001-90';
 
     return (
-      <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100">
-        {/* BARRA SUPERIOR DISCRETA + HEADER */}
-        <header className="sticky top-0 z-50 backdrop-blur-md bg-slate-950/85 border-b border-slate-800/80">
+      <div className="min-h-screen flex flex-col bg-[#060B18] text-slate-100 selection:bg-blue-600 selection:text-white">
+        {/* TOPBAR DE CONTATO DIRETO (TELEFONE, E-MAIL, HORÁRIO E ATALHO ERP) */}
+        <div className="bg-[#030711] border-b border-white/10 text-xs">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-10 flex items-center justify-between">
+            <div className="flex items-center gap-6 text-slate-300">
+              <a href={`tel:${telEmpresa.replace(/\D/g, '')}`} className="flex items-center gap-2 hover:text-blue-400 transition-colors font-medium">
+                <svg className="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                </svg>
+                <span>Central de Atendimento: <strong className="text-white">{telEmpresa}</strong></span>
+              </a>
+
+              <a href={`mailto:${emailEmpresa}`} className="hidden sm:flex items-center gap-2 hover:text-blue-400 transition-colors font-medium">
+                <svg className="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                <span>{emailEmpresa}</span>
+              </a>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <span className="hidden lg:inline-flex items-center gap-1.5 text-slate-400">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                Plantão Operacional 24h • Cobertura Nacional
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* NAVBAR PRINCIPAL COM BOTÃO DE LOGIN PARA O ERP NO TOPO */}
+        <header className="sticky top-0 z-50 backdrop-blur-xl bg-[#060B18]/85 border-b border-white/10">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
-            <div className="flex items-center gap-3">
+            {/* LOGO DA EMPRESA */}
+            <div className="flex items-center gap-3.5">
               {empresa?.logo_url ? (
-                <img src={empresa.logo_url} alt="Logo" className="w-11 h-11 rounded-xl object-contain bg-slate-900 p-1 border border-slate-800" />
+                <img src={empresa.logo_url} alt="Logo" className="w-12 h-12 rounded-xl object-contain bg-slate-900 p-1.5 border border-white/10" />
               ) : (
-                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-extrabold text-lg shadow-lg shadow-blue-600/30">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-700 flex items-center justify-center text-white font-black text-xl shadow-lg shadow-blue-600/30 border border-blue-400/30">
                   PS
                 </div>
               )}
               <div>
-                <span className="text-lg font-extrabold tracking-tight text-white block leading-none">
+                <span className="text-xl font-black tracking-tight text-white block leading-none">
                   {nomeEmpresa}
                 </span>
-                <span className="text-[11px] text-blue-400 font-medium tracking-wider uppercase">
-                   Soluções em Transporte & Logística Integrada
+                <span className="text-[11px] text-blue-400 font-semibold tracking-widest uppercase mt-1 block">
+                  Transportes & Logística Integrada
                 </span>
               </div>
             </div>
 
-            <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-300">
-              <a href="#servicos" className="hover:text-white transition-colors">Serviços</a>
+            {/* LINKS DE NAVEGAÇÃO */}
+            <nav className="hidden md:flex items-center gap-8 text-sm font-semibold text-slate-300">
+              <a href="#inicio" className="hover:text-white transition-colors">Início</a>
+              <a href="#solucoes" className="hover:text-white transition-colors">Soluções</a>
+              <a href="#frota" className="hover:text-white transition-colors">Nossa Frota</a>
               <a href="#rastreamento" className="hover:text-white transition-colors">Rastrear Carga</a>
-              <a href="#frota" className="hover:text-white transition-colors">Frota & Cobertura</a>
-              <a href="#cotacao" className="hover:text-white transition-colors">Cotação Online</a>
+              <a href="#contato" className="hover:text-white transition-colors">Contato</a>
             </nav>
 
-            {/* ÁREA DE LOGIN DISCRETA NO TOPO */}
-            <div className="relative flex items-center gap-3">
+            {/* BOTÕES NO TOPO DIREITO: COTAR FRETE + LOGIN PARA O ERP */}
+            <div className="flex items-center gap-3">
               <a
                 href="#cotacao"
-                className="hidden sm:inline-flex bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-lg shadow-blue-600/25 transition-all"
+                className="hidden sm:inline-flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/15 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-all"
               >
-                Solicitar Frete
+                Cotar Frete
               </a>
 
-              <button
-                onClick={() => setShowTopLogin(!showTopLogin)}
-                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white text-xs font-semibold transition-all cursor-pointer"
-                title="Acesso restrito para colaboradores e gestão ERP"
-              >
-                <span>🔒</span>
-                <span>Portal ERP</span>
-              </button>
-
-              {/* DROPDOWN DE LOGIN RÁPIDO NO TOPO */}
-              {showTopLogin && (
-                <div className="absolute right-0 top-14 w-80 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-5 z-50">
-                  <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-800">
-                    <div>
-                      <h4 className="text-sm font-bold text-white">Acesso ao ERP</h4>
-                      <p className="text-[11px] text-slate-400">Área restrita administrativa</p>
-                    </div>
-                    <button onClick={() => setShowTopLogin(false)} className="text-slate-400 hover:text-white text-xs">✕</button>
-                  </div>
-
-                  {loginMsg && (
-                    <div className="mb-3 p-2.5 rounded-lg bg-rose-950/80 border border-rose-800 text-rose-200 text-xs">
-                      {loginMsg}
-                    </div>
-                  )}
-
-                  <form onSubmit={handleTopLogin} className="space-y-3">
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">E-mail Corporativo</label>
-                      <input
-                        type="email"
-                        required
-                        value={loginEmail}
-                        onChange={(e) => setLoginEmail(e.target.value)}
-                        placeholder="admin@pslog.com"
-                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Senha</label>
-                      <input
-                        type="password"
-                        required
-                        value={loginPassword}
-                        onChange={(e) => setLoginPassword(e.target.value)}
-                        placeholder="••••••••"
-                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
-                    <button
-                      type="submit"
-                      disabled={loginLoading}
-                      className="w-full bg-blue-600 hover:bg-blue-500 text-white py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
-                    >
-                      {loginLoading ? 'Autenticando...' : 'Entrar no Sistema ERP →'}
-                    </button>
-                    <div className="flex justify-between items-center pt-1 text-[11px] text-slate-400">
-                      <Link href="/login" className="hover:text-blue-400 underline">Tela cheia / Recuperar senha</Link>
-                    </div>
-                  </form>
-                </div>
+              {session ? (
+                <Link
+                  href="/"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold shadow-lg shadow-blue-600/30 transition-all"
+                >
+                  <span>Painel ERP</span>
+                  <span>→</span>
+                </Link>
+              ) : (
+                <Link
+                  href="/login"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold shadow-lg shadow-blue-600/30 transition-all"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                  </svg>
+                  <span>Login ERP</span>
+                </Link>
               )}
             </div>
           </div>
         </header>
 
-        {/* HERO SECTION COMERCIAL */}
-        <section className="relative overflow-hidden py-16 lg:py-24 border-b border-slate-900">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-900/30 via-slate-950 to-slate-950 pointer-events-none" />
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+        {/* HERO BANNER COM FOTO DE CAMINHÃO EM ALTA RESOLUÇÃO E CONTATO EM DESTAQUE */}
+        <section id="inicio" className="relative min-h-[640px] lg:min-h-[720px] flex items-center overflow-hidden border-b border-white/10">
+          {/* FOTO DO CAMINHÃO NA ESTRADA (BACKGROUND) */}
+          <div className="absolute inset-0 z-0">
+            <img
+              src="https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?auto=format&fit=crop&w=2000&q=85"
+              alt="Caminhão PS Logística na rodovia"
+              className="w-full h-full object-cover object-center scale-105 transition-transform duration-1000"
+            />
+            {/* Overlay gradiente corporativo escuro para leitura perfeita */}
+            <div className="absolute inset-0 bg-gradient-to-r from-[#060B18] via-[#060B18]/90 to-[#060B18]/45" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#060B18] via-transparent to-[#060B18]/40" />
+          </div>
+
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 lg:py-24 relative z-10 w-full">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+              {/* TEXTO DE MARKETING E CONTATO DIRETO */}
               <div className="lg:col-span-7 space-y-6">
-                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-bold">
-                  <span>🚛</span> Transporte Rodoviário Nacional com Rastreamento Inteligente
+                <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-blue-500/15 border border-blue-400/30 backdrop-blur-md text-blue-300 text-xs font-bold uppercase tracking-wider">
+                  <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping" />
+                  Excelência em Transporte Rodoviário de Cargas
                 </div>
-                <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-tight">
-                  Sua carga entregue no prazo, com <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">segurança e controle total.</span>
+
+                <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight text-white leading-[1.1]">
+                  Força, pontualidade e inteligência para <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-300 to-indigo-300">mover o seu negócio.</span>
                 </h1>
-                <p className="text-base sm:text-lg text-slate-300 max-w-2xl leading-relaxed">
-                  Operamos com frota própria e agregados homologados para cargas fechadas (lotação), dedicadas e fracionadas. Tecnologia de ponta para você acompanhar cada quilômetro da sua mercadoria.
+
+                <p className="text-base sm:text-lg text-slate-200 max-w-2xl leading-relaxed font-normal">
+                  A <strong>{nomeEmpresa}</strong> conecta os principais polos industriais e comerciais do país com frota moderna, rastreamento em tempo real 24/7 e seguro total de carga do embarque à entrega final.
                 </p>
 
+                {/* BOTÕES DE AÇÃO IMEDIATA */}
                 <div className="flex flex-wrap gap-4 pt-2">
                   <a
                     href="#cotacao"
-                    className="bg-blue-600 hover:bg-blue-500 text-white px-7 py-4 rounded-2xl font-bold text-sm shadow-xl shadow-blue-600/30 transition-all"
+                    className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-2xl font-extrabold text-sm shadow-2xl shadow-blue-600/40 transition-all flex items-center gap-2"
                   >
-                    Cotar Frete Agora →
+                    <span>Solicitar Cotação de Frete</span>
+                    <span>→</span>
                   </a>
                   <a
-                    href="#rastreamento"
-                    className="bg-slate-900 hover:bg-slate-800 text-white border border-slate-700 px-7 py-4 rounded-2xl font-bold text-sm transition-all"
+                    href="#contato"
+                    className="bg-white/10 hover:bg-white/15 backdrop-blur-md text-white border border-white/20 px-7 py-4 rounded-2xl font-bold text-sm transition-all flex items-center gap-2"
                   >
-                    📦 Rastrear Mercadoria
+                    <span>📞 Falar com Especialista</span>
                   </a>
                 </div>
 
-                {/* INDICADORES DE CONFIANÇA */}
-                <div className="grid grid-cols-3 gap-6 pt-8 border-t border-slate-800/80">
-                  <div>
-                    <p className="text-2xl sm:text-3xl font-extrabold text-white">99,4%</p>
-                    <p className="text-xs text-slate-400 mt-1">Índice de entregas no prazo (OTIF)</p>
-                  </div>
-                  <div>
-                    <p className="text-2xl sm:text-3xl font-extrabold text-blue-400">24/7</p>
-                    <p className="text-xs text-slate-400 mt-1">Torre de Controle e Monitoramento</p>
-                  </div>
-                  <div>
-                    <p className="text-2xl sm:text-3xl font-extrabold text-emerald-400">100%</p>
-                    <p className="text-xs text-slate-400 mt-1">Cargas seguradas e averbadas</p>
-                  </div>
+                {/* BARRA RÁPIDA DE TELEFONE E E-MAIL DIRETO NO BANNER */}
+                <div className="pt-6 grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
+                  <a
+                    href={`tel:${telEmpresa.replace(/\D/g, '')}`}
+                    className="flex items-center gap-4 p-4 rounded-2xl bg-[#0B132B]/85 backdrop-blur-md border border-white/10 hover:border-blue-500/50 transition-all"
+                  >
+                    <div className="w-11 h-11 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <span className="text-[11px] uppercase tracking-wider text-slate-400 font-bold block">Telefone & WhatsApp Comercial</span>
+                      <span className="text-base font-extrabold text-white">{telEmpresa}</span>
+                    </div>
+                  </a>
+
+                  <a
+                    href={`mailto:${emailEmpresa}`}
+                    className="flex items-center gap-4 p-4 rounded-2xl bg-[#0B132B]/85 backdrop-blur-md border border-white/10 hover:border-blue-500/50 transition-all"
+                  >
+                    <div className="w-11 h-11 rounded-xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-[11px] uppercase tracking-wider text-slate-400 font-bold block">E-mail Corporativo</span>
+                      <span className="text-sm font-extrabold text-white truncate block">{emailEmpresa}</span>
+                    </div>
+                  </a>
                 </div>
               </div>
 
-              {/* CARD DE RASTREAMENTO RÁPIDO NA CAPA */}
+              {/* CARD FLUTUANTE DE RASTREAMENTO DE CARGA E DESTAQUE DA FROTA */}
               <div id="rastreamento" className="lg:col-span-5">
-                <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
-                  <div className="flex items-center justify-between">
+                <div className="bg-[#0B132B]/90 backdrop-blur-xl border border-white/15 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
+                  <div className="flex items-center justify-between border-b border-white/10 pb-4">
                     <div>
-                      <span className="text-xs font-bold uppercase tracking-wider text-blue-400">Torre de Controle</span>
-                      <h3 className="text-xl font-bold text-white mt-0.5">Rastreamento de Carga</h3>
+                      <span className="text-[11px] font-bold uppercase tracking-widest text-blue-400">Torre de Monitoramento</span>
+                      <h3 className="text-xl font-black text-white mt-0.5">Rastrear Carga Online</h3>
                     </div>
-                    <div className="w-12 h-12 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-2xl">
-                      📍
+                    <div className="w-12 h-12 rounded-2xl bg-blue-600/20 border border-blue-400/30 flex items-center justify-center text-blue-400">
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
                     </div>
                   </div>
 
-                  <p className="text-xs text-slate-400">
-                    Consulte em tempo real o andamento da sua entrega informando o código de rastreio (ex: <code className="text-blue-300">PS-2026-1001</code>) ou o nome da empresa.
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    Acompanhe a posição da sua mercadoria em tempo real. Informe o código de rastreio (ex: <code className="text-blue-300 font-bold">PS-2026-1001</code>) ou o nome da empresa embarcadora:
                   </p>
 
                   <form onSubmit={handlePublicTracking} className="space-y-3">
@@ -463,44 +470,43 @@ export default function HomePage() {
                         type="text"
                         value={trackingCode}
                         onChange={(e) => setTrackingCode(e.target.value)}
-                        placeholder="Digite o código ou razão social..."
-                        className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-3.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                        placeholder="Código do pedido ou empresa..."
+                        className="flex-1 bg-[#060B18] border border-white/15 rounded-xl px-4 py-3.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                       />
                       <button
                         type="submit"
-                        className="bg-blue-600 hover:bg-blue-500 text-white px-5 py-3.5 rounded-xl font-bold text-sm cursor-pointer transition-all"
+                        className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3.5 rounded-xl font-bold text-sm cursor-pointer transition-all shadow-lg shadow-blue-600/30"
                       >
-                        Buscar
+                        Localizar
                       </button>
                     </div>
                   </form>
 
                   {trackingSearched && (
-                    <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+                    <div className="p-4 rounded-2xl bg-[#060B18] border border-white/10 space-y-3">
                       {trackingResult ? (
                         <>
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-mono font-bold text-blue-400">
-                              {trackingResult.codigo_rastreio || `PEDIDO #${trackingResult.id}`}
+                              {trackingResult.codigo_rastreio || `REMESSA #${trackingResult.id}`}
                             </span>
                             <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                              {trackingResult.status === 'Pendente' ? 'Em Análise Comercial' : (trackingResult.status_entrega || 'Coletado')}
+                              {trackingResult.status === 'Pendente' ? 'Aguardando Liberação' : (trackingResult.status_entrega || 'Coletado')}
                             </span>
                           </div>
                           <p className="text-sm font-bold text-white">{trackingResult.cliente}</p>
                           <div className="text-xs text-slate-300 flex items-center gap-2">
-                            <span>🚩 <strong>Origem:</strong> {trackingResult.origem || '-'}</span>
+                            <span>Origem: <strong>{trackingResult.origem || '-'}</strong></span>
                             <span>→</span>
-                            <span>🏁 <strong>Destino:</strong> {trackingResult.destino || '-'}</span>
+                            <span>Destino: <strong>{trackingResult.destino || '-'}</strong></span>
                           </div>
-                          {/* Linha do Tempo Visual */}
                           <div className="grid grid-cols-3 gap-2 pt-2">
                             {['Coletado', 'Em Trânsito', 'Entregue'].map((etapa, i) => {
                               const statusAtual = trackingResult.status_entrega || 'Coletado';
                               const ordem = ['Coletado', 'Em Trânsito', 'Entregue'];
                               const concluido = ordem.indexOf(statusAtual) >= i;
                               return (
-                                <div key={etapa} className={`p-2 rounded-lg text-center border text-[11px] font-bold ${concluido ? 'bg-blue-600/20 border-blue-500 text-blue-300' : 'bg-slate-900 border-slate-800 text-slate-500'}`}>
+                                <div key={etapa} className={`p-2 rounded-lg text-center border text-[11px] font-bold ${concluido ? 'bg-blue-600/25 border-blue-500 text-blue-200' : 'bg-slate-900 border-slate-800 text-slate-500'}`}>
                                   {concluido ? '✓ ' : ''}{etapa}
                                 </div>
                               );
@@ -509,178 +515,335 @@ export default function HomePage() {
                         </>
                       ) : (
                         <p className="text-xs text-slate-400 text-center py-2">
-                          Nenhuma remessa encontrada para <strong>"{trackingCode}"</strong>. Verifique o código informado.
+                          Nenhuma remessa localizada para <strong>"{trackingCode}"</strong>.
                         </p>
                       )}
                     </div>
                   )}
+
+                  {/* INDICADORES RESUMIDOS */}
+                  <div className="grid grid-cols-3 gap-3 pt-2 border-t border-white/10 text-center">
+                    <div className="p-2.5 rounded-xl bg-white/5">
+                      <p className="text-lg font-black text-white">99,4%</p>
+                      <p className="text-[10px] text-slate-400 uppercase font-semibold">Pontualidade</p>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-white/5">
+                      <p className="text-lg font-black text-blue-400">+15 mil</p>
+                      <p className="text-[10px] text-slate-400 uppercase font-semibold">Cargas Entregues</p>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-white/5">
+                      <p className="text-lg font-black text-emerald-400">100%</p>
+                      <p className="text-[10px] text-slate-400 uppercase font-semibold">Carga Segurada</p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </section>
 
-        {/* SERVIÇOS LOGÍSTICOS */}
-        <section id="servicos" className="py-16 lg:py-20 bg-slate-950">
+        {/* SEÇÃO DE DIFERENCIAIS E SOLUÇÕES LOGÍSTICAS */}
+        <section id="solucoes" className="py-20 bg-[#060B18]">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
-            <div className="text-center max-w-2xl mx-auto space-y-3">
-              <span className="text-xs font-bold uppercase tracking-widest text-blue-400">Portfólio Operacional</span>
-              <h2 className="text-3xl font-extrabold text-white">Modalidades de Transporte Sob Medida</h2>
-              <p className="text-sm text-slate-400">
-                Estrutura completa para atender embarques urgentes, contratos dedicados e operações interestaduais.
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+              <div>
+                <span className="text-xs font-bold uppercase tracking-widest text-blue-400">Soluções Corporativas</span>
+                <h2 className="text-3xl sm:text-4xl font-black text-white mt-2">
+                  Engenharia Logística para Todos os Perfis de Carga
+                </h2>
+              </div>
+              <p className="text-sm text-slate-400 max-w-md">
+                Atendemos indústrias, distribuidores, varejistas e operações de e-commerce com rigor operacional e rastreabilidade ponta a ponta.
               </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {[
                 {
-                  icon: '🚛',
-                  titulo: 'Carga Lotação (FTL)',
-                  desc: 'Veículo exclusivo dedicado à sua mercadoria, saindo direto da origem para o destino sem baldeações, reduzindo o tempo de trânsito e o risco de avarias.'
+                  badge: 'FTL • Carga Dedicada',
+                  titulo: 'Transporte Lotação & Cargas Pesadas',
+                  desc: 'Carretas e caminhões exclusivos para grandes volumes industriais, saindo diretamente da planta de origem para o destinatário sem transbordo.',
+                  itens: ['Menor tempo de trânsito (Transit Time)', 'Risco zero de manuseio intermediário', 'Monitoramento via satélite em tempo real']
                 },
                 {
-                  icon: '📦',
-                  titulo: 'Carga Fracionada Expressa (LTL)',
-                  desc: 'Consolidação inteligente de cargas com saídas diárias programadas, ideal para remessas médias e paletizadas com excelente custo-benefício.'
+                  badge: 'LTL • Fracionado Expresso',
+                  titulo: 'Distribuição Regional & Interestadual',
+                  desc: 'Rotas diárias consolidadas com saídas programadas, permitindo embarcar volumes menores e paletizados com tarifa reduzida e alta frequência.',
+                  itens: ['Coletas programadas em até 24h', 'Conferência eletrônica por código', 'Comprovante de entrega digitalizado']
                 },
                 {
-                  icon: '⚡',
-                  titulo: 'Fretes Urgentes & Dedicados',
-                  desc: 'Vans, utilitários e caminhões prontos para coletas imediatas de insumos críticos, peças industriais e operações Just-in-Time.'
+                  badge: 'JIT • Operações Críticas',
+                  titulo: 'Logística Dedicada & Fretes Urgentes',
+                  desc: 'Frota dedicada com veículos utilitários, VUCs, Vans e caminhões prontos para abastecimento de linhas de produção e entregas emergenciais.',
+                  itens: ['Atendimento imediato sob demanda', 'Motoristas treinados e homologados', 'Gestão completa de KPIs e SLA']
                 }
-              ].map((s) => (
-                <div key={s.titulo} className="bg-slate-900/70 border border-slate-800 hover:border-blue-500/40 rounded-2xl p-7 space-y-4 transition-all">
-                  <div className="w-12 h-12 rounded-2xl bg-blue-600/15 border border-blue-500/20 flex items-center justify-center text-2xl">
-                    {s.icon}
+              ].map((card) => (
+                <div
+                  key={card.titulo}
+                  className="bg-[#0B132B] border border-white/10 hover:border-blue-500/40 rounded-3xl p-8 flex flex-col justify-between transition-all group"
+                >
+                  <div className="space-y-4">
+                    <span className="inline-block px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[11px] font-bold uppercase">
+                      {card.badge}
+                    </span>
+                    <h3 className="text-xl font-extrabold text-white group-hover:text-blue-400 transition-colors">
+                      {card.titulo}
+                    </h3>
+                    <p className="text-sm text-slate-400 leading-relaxed">{card.desc}</p>
                   </div>
-                  <h3 className="text-lg font-bold text-white">{s.titulo}</h3>
-                  <p className="text-sm text-slate-400 leading-relaxed">{s.desc}</p>
+
+                  <ul className="space-y-2 pt-6 mt-6 border-t border-white/10 text-xs text-slate-300">
+                    {card.itens.map((it) => (
+                      <li key={it} className="flex items-center gap-2">
+                        <span className="text-emerald-400 font-bold">✓</span> {it}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               ))}
             </div>
           </div>
         </section>
 
-        {/* FORMULÁRIO DE COTAÇÃO ONLINE INTEGRADO AO ERP */}
-        <section id="cotacao" className="py-16 lg:py-20 bg-slate-900/50 border-t border-slate-800/80">
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-10 shadow-2xl space-y-6">
-              <div className="text-center space-y-2">
-                <span className="text-xs font-bold uppercase tracking-widest text-blue-400">Orçamento Rápido</span>
-                <h2 className="text-2xl sm:text-3xl font-extrabold text-white">Solicite uma Cotação de Frete</h2>
-                <p className="text-sm text-slate-400">
-                  Seu pedido cai diretamente na nossa Central de Operações ERP para cálculo imediato da melhor tarifa.
-                </p>
-              </div>
+        {/* VITRINE VISUAL DA FROTA COM FOTOS DE CAMINHÕES */}
+        <section id="frota" className="py-20 bg-[#091024] border-y border-white/10">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
+            <div className="text-center max-w-3xl mx-auto space-y-3">
+              <span className="text-xs font-bold uppercase tracking-widest text-blue-400">Estrutura Operacional</span>
+              <h2 className="text-3xl sm:text-4xl font-black text-white">Frota Moderna, Revisada e Monitorada</h2>
+              <p className="text-sm text-slate-400">
+                Veículos para todas as etapas da cadeia de suprimentos: do transporte rodoviário pesado à distribuição urbana rápida.
+              </p>
+            </div>
 
-              {quoteMsg.text && (
-                <div className={`p-4 rounded-xl text-sm border ${quoteMsg.type === 'success' ? 'bg-emerald-950/90 border-emerald-700 text-emerald-200' : 'bg-rose-950/90 border-rose-700 text-rose-200'}`}>
-                  {quoteMsg.text}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {[
+                {
+                  img: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=900&q=80',
+                  nome: 'Carretas & Caminhões Pesados',
+                  cap: 'Até 32 Toneladas • Baú, Sider e Grade Baixa',
+                  detalhe: 'Ideais para longas distâncias interestaduais, cargas paletizadas e operações industriais de grande porte.'
+                },
+                {
+                  img: 'https://images.unsplash.com/photo-1519003722824-194d4455a60c?auto=format&fit=crop&w=900&q=80',
+                  nome: 'Caminhões Truck, Toco & VUC',
+                  cap: 'De 3 a 14 Toneladas • Distribuição Regional',
+                  detalhe: 'Alta versatilidade para entregas intermunicipais e centros urbanos com restrição de circulação.'
+                },
+                {
+                  img: 'https://images.unsplash.com/photo-1566576912321-d58ddd7a6088?auto=format&fit=crop&w=900&q=80',
+                  nome: 'Vans & Utilitários Expressos',
+                  cap: 'Até 3.500 kg • Coletas e Entregas Rápidas',
+                  detalhe: 'Agilidade máxima para cargas fracionadas urgentes, e-commerce, insumos hospitalares e tecnologia.'
+                }
+              ].map((item) => (
+                <div key={item.nome} className="bg-[#060B18] border border-white/10 rounded-3xl overflow-hidden shadow-xl flex flex-col">
+                  <div className="h-52 overflow-hidden relative">
+                    <img
+                      src={item.img}
+                      alt={item.nome}
+                      className="w-full h-full object-cover hover:scale-105 transition-transform duration-500"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#060B18] via-transparent to-transparent" />
+                  </div>
+                  <div className="p-6 space-y-2 flex-1 flex flex-col justify-between">
+                    <div>
+                      <span className="text-[11px] font-bold text-blue-400 uppercase">{item.cap}</span>
+                      <h3 className="text-lg font-extrabold text-white mt-1">{item.nome}</h3>
+                      <p className="text-xs text-slate-400 mt-2 leading-relaxed">{item.detalhe}</p>
+                    </div>
+                    <a href="#cotacao" className="inline-block pt-4 text-xs font-bold text-blue-400 hover:text-blue-300">
+                      Solicitar este veículo →
+                    </a>
+                  </div>
                 </div>
-              )}
-
-              <form onSubmit={handlePublicQuoteSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Empresa ou Nome Completo *</label>
-                  <input
-                    type="text"
-                    required
-                    value={quoteForm.cliente}
-                    onChange={(e) => setQuoteForm({ ...quoteForm, cliente: e.target.value })}
-                    placeholder="Ex: Metalúrgica ABC Ltda"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">WhatsApp / Telefone *</label>
-                  <input
-                    type="text"
-                    required
-                    value={quoteForm.solicitante_telefone}
-                    onChange={(e) => setQuoteForm({ ...quoteForm, solicitante_telefone: e.target.value })}
-                    placeholder="(11) 99999-9999"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Cidade/UF de Coleta (Origem) *</label>
-                  <input
-                    type="text"
-                    required
-                    value={quoteForm.origem}
-                    onChange={(e) => setQuoteForm({ ...quoteForm, origem: e.target.value })}
-                    placeholder="Ex: Guarulhos - SP"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Cidade/UF de Entrega (Destino) *</label>
-                  <input
-                    type="text"
-                    required
-                    value={quoteForm.destino}
-                    onChange={(e) => setQuoteForm({ ...quoteForm, destino: e.target.value })}
-                    placeholder="Ex: Curitiba - PR"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Veículo Desejado</label>
-                  <select
-                    value={quoteForm.tipo_veiculo}
-                    onChange={(e) => setQuoteForm({ ...quoteForm, tipo_veiculo: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white"
-                  >
-                    <option value="Caminhão">Caminhão / Carreta</option>
-                    <option value="VUC / 3/4">Caminhão VUC / 3/4</option>
-                    <option value="Van">Van / Utilitário</option>
-                    <option value="Moto">Moto Express</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Peso Estimado (kg)</label>
-                  <input
-                    type="number"
-                    value={quoteForm.peso_estimado}
-                    onChange={(e) => setQuoteForm({ ...quoteForm, peso_estimado: e.target.value })}
-                    placeholder="Ex: 4500"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white"
-                  />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Detalhes da Mercadoria / Volume / NF</label>
-                  <textarea
-                    rows={2}
-                    value={quoteForm.descricao}
-                    onChange={(e) => setQuoteForm({ ...quoteForm, descricao: e.target.value })}
-                    placeholder="Informe tipo de mercadoria, quantidade de paletes ou observações..."
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white"
-                  />
-                </div>
-                <div className="sm:col-span-2 pt-2">
-                  <button
-                    type="submit"
-                    disabled={quoteSending}
-                    className="w-full bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-xl font-bold text-sm shadow-lg shadow-blue-600/30 transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    {quoteSending ? 'Registrando Solicitação...' : 'Enviar Pedido de Cotação para a Central →'}
-                  </button>
-                </div>
-              </form>
+              ))}
             </div>
           </div>
         </section>
 
-        {/* RODAPÉ */}
-        <footer className="mt-auto py-8 border-t border-slate-900 bg-slate-950 text-xs text-slate-500">
+        {/* SEÇÃO DE COTAÇÃO + CANAIS DE ATENDIMENTO DIRETO (TELEFONE E E-MAIL) */}
+        <section id="cotacao" className="py-20 bg-[#060B18]">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
+              {/* COLUNA ESQUERDA: DADOS DE CONTATO DA EMPRESA */}
+              <div id="contato" className="lg:col-span-5 space-y-6">
+                <span className="text-xs font-bold uppercase tracking-widest text-blue-400">Canais de Atendimento</span>
+                <h2 className="text-3xl font-black text-white leading-tight">
+                  Fale Direto com a Mesa Operacional da {nomeEmpresa}
+                </h2>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  Precisa de uma cotação imediata ou quer estruturar uma operação logística dedicada para a sua empresa? Nossa equipe comercial atende por telefone, WhatsApp e e-mail.
+                </p>
+
+                <div className="space-y-4 pt-2">
+                  <div className="p-5 rounded-2xl bg-[#0B132B] border border-white/10 flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 text-xl shrink-0">
+                      📞
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold uppercase text-slate-400">Central Telefônica & WhatsApp</h4>
+                      <p className="text-lg font-black text-white mt-0.5">{telEmpresa}</p>
+                      <p className="text-xs text-slate-400 mt-1">Atendimento comercial de Seg. a Sex. e plantão operacional 24h</p>
+                    </div>
+                  </div>
+
+                  <div className="p-5 rounded-2xl bg-[#0B132B] border border-white/10 flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 text-xl shrink-0">
+                      ✉️
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold uppercase text-slate-400">E-mail Comercial & Cotações</h4>
+                      <p className="text-base font-extrabold text-white mt-0.5 break-all">{emailEmpresa}</p>
+                      <p className="text-xs text-slate-400 mt-1">Envio de XML de NF-e, tabelas de frete e faturamento</p>
+                    </div>
+                  </div>
+
+                  <div className="p-5 rounded-2xl bg-[#0B132B] border border-white/10 flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 text-xl shrink-0">
+                      🏢
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold uppercase text-slate-400">Base Operacional & Matriz</h4>
+                      <p className="text-sm font-bold text-white mt-0.5">{enderecoEmpresa}</p>
+                      <p className="text-xs text-slate-400 mt-1">CNPJ: {cnpjEmpresa}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* COLUNA DIREITA: FORMULÁRIO DE COTAÇÃO INTEGRADO AO ERP */}
+              <div className="lg:col-span-7 bg-[#0B132B] border border-white/10 rounded-3xl p-6 sm:p-10 shadow-2xl space-y-6">
+                <div>
+                  <span className="text-xs font-bold uppercase tracking-widest text-blue-400">Cotação Expressa</span>
+                  <h3 className="text-2xl font-black text-white mt-1">Solicite seu Orçamento de Transporte</h3>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Preencha os dados do embarque abaixo. Sua solicitação é integrada diretamente ao nosso sistema ERP.
+                  </p>
+                </div>
+
+                {quoteMsg.text && (
+                  <div className={`p-4 rounded-xl text-sm border ${quoteMsg.type === 'success' ? 'bg-emerald-950/90 border-emerald-700 text-emerald-200' : 'bg-rose-950/90 border-rose-700 text-rose-200'}`}>
+                    {quoteMsg.text}
+                  </div>
+                )}
+
+                <form onSubmit={handlePublicQuoteSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 uppercase mb-1.5">Empresa ou Nome Completo *</label>
+                    <input
+                      type="text"
+                      required
+                      value={quoteForm.cliente}
+                      onChange={(e) => setQuoteForm({ ...quoteForm, cliente: e.target.value })}
+                      placeholder="Ex: Indústria Metalúrgica Brasil"
+                      className="w-full bg-[#060B18] border border-white/15 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 uppercase mb-1.5">Telefone / WhatsApp *</label>
+                    <input
+                      type="text"
+                      required
+                      value={quoteForm.solicitante_telefone}
+                      onChange={(e) => setQuoteForm({ ...quoteForm, solicitante_telefone: e.target.value })}
+                      placeholder="(11) 99999-9999"
+                      className="w-full bg-[#060B18] border border-white/15 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-bold text-slate-300 uppercase mb-1.5">E-mail para Retorno da Proposta</label>
+                    <input
+                      type="email"
+                      value={quoteForm.solicitante_email}
+                      onChange={(e) => setQuoteForm({ ...quoteForm, solicitante_email: e.target.value })}
+                      placeholder="compras@suaempresa.com.br"
+                      className="w-full bg-[#060B18] border border-white/15 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 uppercase mb-1.5">Cidade/UF de Coleta (Origem) *</label>
+                    <input
+                      type="text"
+                      required
+                      value={quoteForm.origem}
+                      onChange={(e) => setQuoteForm({ ...quoteForm, origem: e.target.value })}
+                      placeholder="Ex: Guarulhos - SP"
+                      className="w-full bg-[#060B18] border border-white/15 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 uppercase mb-1.5">Cidade/UF de Entrega (Destino) *</label>
+                    <input
+                      type="text"
+                      required
+                      value={quoteForm.destino}
+                      onChange={(e) => setQuoteForm({ ...quoteForm, destino: e.target.value })}
+                      placeholder="Ex: Belo Horizonte - MG"
+                      className="w-full bg-[#060B18] border border-white/15 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 uppercase mb-1.5">Tipo de Veículo</label>
+                    <select
+                      value={quoteForm.tipo_veiculo}
+                      onChange={(e) => setQuoteForm({ ...quoteForm, tipo_veiculo: e.target.value })}
+                      className="w-full bg-[#060B18] border border-white/15 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="Caminhão">Carreta / Caminhão Pesado</option>
+                      <option value="VUC / 3/4">Caminhão VUC / Toco / 3/4</option>
+                      <option value="Van">Van / Utilitário Expresso</option>
+                      <option value="Moto">Moto Express</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 uppercase mb-1.5">Peso Estimado (kg)</label>
+                    <input
+                      type="number"
+                      value={quoteForm.peso_estimado}
+                      onChange={(e) => setQuoteForm({ ...quoteForm, peso_estimado: e.target.value })}
+                      placeholder="Ex: 12000"
+                      className="w-full bg-[#060B18] border border-white/15 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-bold text-slate-300 uppercase mb-1.5">Descrição da Carga / Cubagem / Valor da NF</label>
+                    <textarea
+                      rows={3}
+                      value={quoteForm.descricao}
+                      onChange={(e) => setQuoteForm({ ...quoteForm, descricao: e.target.value })}
+                      placeholder="Informe tipo de mercadoria, quantidade de volumes/paletes ou necessidades especiais..."
+                      className="w-full bg-[#060B18] border border-white/15 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div className="sm:col-span-2 pt-2">
+                    <button
+                      type="submit"
+                      disabled={quoteSending}
+                      className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white py-4 rounded-xl font-extrabold text-sm shadow-xl shadow-blue-600/30 transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      {quoteSending ? 'Enviando Solicitação...' : 'Receber Cotação Comercial →'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* RODAPÉ CORPORATIVO COMPLETO */}
+        <footer className="mt-auto py-10 border-t border-white/10 bg-[#030711] text-xs text-slate-400">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p>© {new Date().getFullYear()} {nomeEmpresa}. Todos os direitos reservados.</p>
-            <div className="flex items-center gap-6">
+            <div>
+              <p className="font-bold text-white">{razaoEmpresa}</p>
+              <p className="mt-0.5">© {new Date().getFullYear()} {nomeEmpresa} • CNPJ: {cnpjEmpresa}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-6">
               <span>📞 {telEmpresa}</span>
               <span>✉️ {emailEmpresa}</span>
-              <button onClick={() => setShowTopLogin(true)} className="text-slate-400 hover:text-white underline cursor-pointer">
-                Acesso Interno ERP
-              </button>
+              <Link href="/login" className="text-blue-400 hover:text-blue-300 font-bold underline">
+                Acessar ERP Interno →
+              </Link>
             </div>
           </div>
         </footer>
@@ -693,29 +856,34 @@ export default function HomePage() {
   // ============================================================================
   return (
     <div className="space-y-6 pb-8">
-      {/* CABEÇALHO DO ERP */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white p-6 rounded-2xl shadow-lg border border-slate-800">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white p-6 sm:p-7 rounded-3xl shadow-xl border border-slate-800">
         <div>
-          <span className="text-xs font-bold uppercase tracking-widest text-blue-400">Visão Geral Corporativa</span>
-          <h1 className="text-2xl sm:text-3xl font-extrabold mt-0.5">
-            {empresa?.nome_fantasia || 'PS LOGÍSTICA'} — Torre de Controle & ERP
+          <span className="text-[11px] font-bold uppercase tracking-widest text-blue-400">Central de Comando Corporativa</span>
+          <h1 className="text-2xl sm:text-3xl font-black mt-1">
+            {empresa?.nome_fantasia || 'PS LOGÍSTICA'} — Painel Executivo ERP
           </h1>
           <p className="text-slate-300 text-sm mt-1">
-            Acompanhamento em tempo real de fretes, contas a pagar/receber, frota e motoristas.
+            Controle integrado de faturamento, contas a pagar e receber, frota, motoristas e entregas em rota.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
           <Link
+            href="/?site=1"
+            className="bg-white/10 hover:bg-white/15 border border-white/20 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all"
+          >
+            🌐 Ver Site Comercial
+          </Link>
+          <Link
             href="/cotacoes"
             className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-md transition-all"
           >
-            + Emitir Cotação / Ordem de Coleta
+            + Nova Cotação / Coleta
           </Link>
           <Link
             href="/financeiro"
             className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-md transition-all"
           >
-            $ Baixar Títulos / Financeiro
+            $ Contas a Pagar / Receber
           </Link>
         </div>
       </div>
@@ -726,17 +894,17 @@ export default function HomePage() {
         </div>
       ) : (
         <>
-          {/* CARDS FINANCEIROS (CONTAS A PAGAR, RECEBER E CAIXA) */}
+          {/* CARDS FINANCEIROS */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-bold uppercase text-slate-400">Saldo em Caixa (Realizado)</span>
                 <span className="w-9 h-9 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center text-lg">🏦</span>
               </div>
-              <p className={`text-2xl font-extrabold ${kpis.saldoRealizado >= 0 ? 'text-slate-900 dark:text-white' : 'text-rose-500'}`}>
+              <p className={`text-2xl font-black ${kpis.saldoRealizado >= 0 ? 'text-slate-900 dark:text-white' : 'text-rose-500'}`}>
                 R$ {kpis.saldoRealizado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </p>
-              <Link href="/financeiro" className="text-xs text-blue-600 dark:text-blue-400 mt-2 inline-block hover:underline">
+              <Link href="/financeiro" className="text-xs text-blue-600 dark:text-blue-400 mt-2 inline-block hover:underline font-semibold">
                 Ver extrato conciliado →
               </Link>
             </div>
@@ -746,10 +914,10 @@ export default function HomePage() {
                 <span className="text-xs font-bold uppercase text-emerald-600 dark:text-emerald-400">Contas a Receber (Aberto)</span>
                 <span className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center text-lg">📈</span>
               </div>
-              <p className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">
+              <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
                 R$ {kpis.aReceberAberto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </p>
-              <Link href="/financeiro" className="text-xs text-emerald-600 dark:text-emerald-400 mt-2 inline-block hover:underline">
+              <Link href="/financeiro" className="text-xs text-emerald-600 dark:text-emerald-400 mt-2 inline-block hover:underline font-semibold">
                 Gerenciar faturas de clientes →
               </Link>
             </div>
@@ -759,10 +927,10 @@ export default function HomePage() {
                 <span className="text-xs font-bold uppercase text-rose-600 dark:text-rose-400">Contas a Pagar (Aberto)</span>
                 <span className="w-9 h-9 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center text-lg">📉</span>
               </div>
-              <p className="text-2xl font-extrabold text-rose-600 dark:text-rose-400">
+              <p className="text-2xl font-black text-rose-600 dark:text-rose-400">
                 R$ {kpis.aPagarAberto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </p>
-              <Link href="/financeiro" className="text-xs text-rose-600 dark:text-rose-400 mt-2 inline-block hover:underline">
+              <Link href="/financeiro" className="text-xs text-rose-600 dark:text-rose-400 mt-2 inline-block hover:underline font-semibold">
                 Programação de desembolso →
               </Link>
             </div>
@@ -772,10 +940,10 @@ export default function HomePage() {
                 <span className="text-xs font-bold uppercase text-amber-600 dark:text-amber-400">Projeção Líquida</span>
                 <span className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center text-lg">📊</span>
               </div>
-              <p className="text-2xl font-extrabold text-slate-900 dark:text-white">
+              <p className="text-2xl font-black text-slate-900 dark:text-white">
                 R$ {(kpis.saldoRealizado + kpis.aReceberAberto - kpis.aPagarAberto).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </p>
-              <Link href="/relatorios" className="text-xs text-amber-600 dark:text-amber-400 mt-2 inline-block hover:underline">
+              <Link href="/relatorios" className="text-xs text-amber-600 dark:text-amber-400 mt-2 inline-block hover:underline font-semibold">
                 Abrir DRE Gerencial →
               </Link>
             </div>
@@ -783,42 +951,41 @@ export default function HomePage() {
 
           {/* CARDS OPERACIONAIS TMS */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <Link href="/entregas" className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 hover:border-blue-500 transition-all flex items-center justify-between">
+            <Link href="/entregas" className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 hover:border-blue-500 transition-all flex items-center justify-between">
               <div>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Viagens em Andamento</p>
-                <p className="text-xl font-extrabold text-slate-900 dark:text-white mt-0.5">{kpis.viagensAtivas}</p>
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Viagens em Andamento</p>
+                <p className="text-2xl font-black text-slate-900 dark:text-white mt-0.5">{kpis.viagensAtivas}</p>
               </div>
               <span className="text-2xl">🚚</span>
             </Link>
 
-            <Link href="/cotacoes" className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 hover:border-blue-500 transition-all flex items-center justify-between">
+            <Link href="/cotacoes" className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 hover:border-blue-500 transition-all flex items-center justify-between">
               <div>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Cotações Aguardando</p>
-                <p className="text-xl font-extrabold text-amber-500 mt-0.5">{kpis.cotacoesPendentes}</p>
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Cotações Pendentes</p>
+                <p className="text-2xl font-black text-amber-500 mt-0.5">{kpis.cotacoesPendentes}</p>
               </div>
               <span className="text-2xl">📋</span>
             </Link>
 
-            <Link href="/veiculos" className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 hover:border-blue-500 transition-all flex items-center justify-between">
+            <Link href="/veiculos" className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 hover:border-blue-500 transition-all flex items-center justify-between">
               <div>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Veículos na Frota</p>
-                <p className="text-xl font-extrabold text-slate-900 dark:text-white mt-0.5">{kpis.veiculosTotal}</p>
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Veículos na Frota</p>
+                <p className="text-2xl font-black text-slate-900 dark:text-white mt-0.5">{kpis.veiculosTotal}</p>
               </div>
               <span className="text-2xl">🚛</span>
             </Link>
 
-            <Link href="/motoristas" className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 hover:border-blue-500 transition-all flex items-center justify-between">
+            <Link href="/motoristas" className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 hover:border-blue-500 transition-all flex items-center justify-between">
               <div>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Motoristas Cadastrados</p>
-                <p className="text-xl font-extrabold text-slate-900 dark:text-white mt-0.5">{kpis.motoristasTotal}</p>
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Motoristas Ativos</p>
+                <p className="text-2xl font-black text-slate-900 dark:text-white mt-0.5">{kpis.motoristasTotal}</p>
               </div>
               <span className="text-2xl">🪪</span>
             </Link>
           </div>
 
-          {/* ALERTAS DE GESTÃO + PRÓXIMOS VENCIMENTOS + ÚLTIMAS VIAGENS */}
+          {/* ALERTAS, TÍTULOS E VIAGENS */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* ALERTAS OPERACIONAIS */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -853,7 +1020,6 @@ export default function HomePage() {
               )}
             </div>
 
-            {/* CONTAS A PAGAR E RECEBER PRÓXIMAS */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -887,7 +1053,6 @@ export default function HomePage() {
               )}
             </div>
 
-            {/* ÚLTIMAS COTAÇÕES E VIAGENS */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -924,5 +1089,13 @@ export default function HomePage() {
         </>
       )}
     </div>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#060B18]" />}>
+      <HomeContent />
+    </Suspense>
   );
 }
