@@ -156,10 +156,16 @@ export default function DashboardPage() {
             🌐 Ver Site Principal
           </Link>
           <Link
+            href="/coletas-gmax"
+            className="bg-amber-500 hover:bg-amber-400 text-slate-950 px-4 py-2.5 rounded-xl text-xs font-black shadow-md transition-all"
+          >
+            📑 Planilha Coletas GMAX
+          </Link>
+          <Link
             href="/cotacoes"
             className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-md transition-all"
           >
-            + Nova Cotação / Coleta
+            + Nova Cotação
           </Link>
           <Link
             href="/financeiro"

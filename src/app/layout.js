@@ -73,6 +73,7 @@ export default function RootLayout({ children }) {
 
   const navItems = [
     { href: '/dashboard', label: 'Painel Executivo', icon: '📊', group: 'Visão Geral' },
+    { href: '/coletas-gmax', label: 'Planilha Coletas GMAX', icon: '📑', group: 'Operação TMS' },
     { href: '/cotacoes', label: 'Cotações & Fretes', icon: '📋', group: 'Operação TMS' },
     { href: '/entregas', label: 'Torre de Entregas', icon: '🚚', group: 'Operação TMS' },
     { href: '/clientes', label: 'Clientes & Embarcadores', icon: '🏢', group: 'Cadastros' },
