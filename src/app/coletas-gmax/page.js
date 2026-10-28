@@ -35,11 +35,52 @@ const VALORES_PADRAO = {
   'ARARAS': 110
 };
 
-// Gera rótulo da semana atual formatada ex: "SEMANA 26/10/26 A 30/10/26"
+// Exemplos prontos para você testar com 1 clique se a foto/OCR está funcionando!
+const SIMULACOES_NF = [
+  {
+    nome: 'Simulação 1: LUITEX (Americana)',
+    texto: `DANFE
+DOCUMENTO AUXILIAR DA NOTA FISCAL ELETRÔNICA
+EMITENTE: LUITEX MATERIAIS PARA FIXACAO LTDA
+AV. BRASIL, 1500 - AMERICANA - SP
+CHAVE DE ACESSO: 35261012345678000190550010006440891234567890
+NF-e Nº 644.089
+SÉRIE 1
+DESTINATÁRIO: DA MATA ACUCAR E ALCOOL S/A
+TRANSPORTADOR / VOLUMES:
+QUANTIDADE: 2 VOLUMES
+ESPÉCIE: VOL
+PESO BRUTO: 12.50 KG
+PESO LÍQUIDO: 12.00 KG`
+  },
+  {
+    nome: 'Simulação 2: TRATORCOM (Piracicaba)',
+    texto: `DANFE NOTA FISCAL ELETRONICA
+TRATORCOM PECAS E TRATORES LTDA
+DADOS DO EMITENTE: RUA DO PORTO, 300 - PIRACICABA - SP
+Nº 151.796 SÉRIE 2
+DESTINATÁRIO: COOP. AGRICOLA
+DADOS DOS VOLUMES TRANSPORTADOS:
+QTD: 1 VOL
+PESO BRUTO: 94.00 KG
+VALOR TOTAL DA NOTA: R$ 4.250,00`
+  },
+  {
+    nome: 'Simulação 3: SEALVALVE (Araras)',
+    texto: `DOCUMENTO AUXILIAR DA NOTA FISCAL ELETRONICA
+SEALVALVE INDUSTRIA DE VALVULAS
+DISTRITO INDUSTRIAL - ARARAS - SP
+NF-e N° 12631
+DESTINO: COOP. AGRICOLA
+QUANTIDADE: 1 VOL
+PESO: 10.00 KG`
+  }
+];
+
+// Rótulo dinâmico da semana atual
 function getRotuloSemanaAtual() {
   const agora = new Date();
-  const diaSemana = agora.getDay(); // 0 Dom, 1 Seg, ..., 5 Sex
-  // Calcula a segunda-feira da semana
+  const diaSemana = agora.getDay();
   const diffSegunda = diaSemana === 0 ? -6 : 1 - diaSemana;
   const segunda = new Date(agora);
   segunda.setDate(agora.getDate() + diffSegunda);
@@ -75,19 +116,30 @@ export default function PlanilhaGmaxPage() {
   const [showOcrModal, setShowOcrModal] = useState(false);
   const [ocrPreviewUrl, setOcrPreviewUrl] = useState('');
   const [ocrDadosExtraidos, setOcrDadosExtraidos] = useState(null);
-  const cameraInputRef = useRef(null);
+  const [cameraAtiva, setCameraAtiva] = useState(false);
+  const videoRef = useRef(null);
+  const mediaStreamRef = useRef(null);
 
-  // Carrega a lista de semanas salvas
+  // Inputs de arquivo (Câmera Traseira nativa e Galeria/Arquivo)
+  const cameraTraseiraInputRef = useRef(null);
+  const galeriaInputRef = useRef(null);
+
   useEffect(() => {
     carregarSemanas();
   }, []);
 
-  // Quando muda a semana ativa, carrega as linhas correspondentes
   useEffect(() => {
     if (semanaAtiva) {
       carregarLinhasDaSemana(semanaAtiva);
     }
   }, [semanaAtiva]);
+
+  // Limpa stream de câmera ao desmontar
+  useEffect(() => {
+    return () => {
+      pararCameraAoVivo();
+    };
+  }, []);
 
   async function carregarSemanas() {
     try {
@@ -143,7 +195,6 @@ export default function PlanilhaGmaxPage() {
         });
       }
 
-      // Garante sempre um mínimo de 30 linhas na grade para digitação ágil
       while (linhasFiltradas.length < 35) {
         linhasFiltradas.push(criarLinhaVazia(linhasFiltradas.length + 1, nomeSemana));
       }
@@ -176,7 +227,6 @@ export default function PlanilhaGmaxPage() {
     };
   }
 
-  // Atualização de célula com salvamento automático imediato no Supabase
   async function atualizarCelula(index, campo, valor) {
     const novasLinhas = [...linhas];
     const linhaAtual = { ...novasLinhas[index], [campo]: valor, semana_nome: semanaAtiva };
@@ -206,7 +256,6 @@ export default function PlanilhaGmaxPage() {
     novasLinhas[index] = linhaAtual;
     setLinhas(novasLinhas);
 
-    // Salva no banco se houver dados mínimos preenchidos
     if (linhaAtual.empresa || linhaAtual.nf || linhaAtual.dbId) {
       setSavingStatus('Salvando...');
       try {
@@ -287,27 +336,91 @@ export default function PlanilhaGmaxPage() {
   }
 
   // ==========================================
-  // FOTO DA NOTA FISCAL COM OCR E PREENCHIMENTO AUTOMÁTICO
+  // CÂMERA TRASEIRA FORÇADA VIA WEBCAM API OU CAPTURE
   // ==========================================
-  async function handleFotoSelecionada(e) {
+  async function iniciarCameraTraseiraAoVivo() {
+    setCameraAtiva(true);
+    setShowOcrModal(true);
+    setOcrDadosExtraidos(null);
+    setOcrPreviewUrl('');
+
+    try {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        // facingMode: { exact: "environment" } ou fallback { ideal: "environment" } força a câmera TRASEIRA
+        const constraints = {
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+          }
+        };
+
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        mediaStreamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play();
+        }
+      } else {
+        // Se o navegador não suportar getUserMedia direto, abre o seletor com capture="environment"
+        cameraTraseiraInputRef.current?.click();
+      }
+    } catch (err) {
+      console.warn('Não foi possível abrir stream direto, usando input capture:', err);
+      pararCameraAoVivo();
+      cameraTraseiraInputRef.current?.click();
+    }
+  }
+
+  function pararCameraAoVivo() {
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+    setCameraAtiva(false);
+  }
+
+  // Captura o frame do vídeo e roda o OCR
+  function capturarFotoDaCameraAoVivo() {
+    if (!videoRef.current) return;
+    const video = videoRef.current;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    canvas.toBlob((blob) => {
+      if (blob) {
+        pararCameraAoVivo();
+        processarImagemOcr(blob);
+      }
+    }, 'image/jpeg', 0.92);
+  }
+
+  // Recebe imagem via arquivo (ou foto tirada) e processa
+  async function handleArquivoFoto(e) {
     const file = e.target.files?.[0];
     if (!file) return;
+    pararCameraAoVivo();
+    processarImagemOcr(file);
+  }
 
-    const preview = URL.createObjectURL(file);
+  async function processarImagemOcr(fileOrBlob) {
+    const preview = URL.createObjectURL(fileOrBlob);
     setOcrPreviewUrl(preview);
     setShowOcrModal(true);
     setOcrLoading(true);
-    setOcrProgress(10);
+    setOcrProgress(15);
 
     try {
-      // Import dinâmico do Tesseract para máxima performance
       const { createWorker } = await import('tesseract.js');
-      setOcrProgress(30);
+      setOcrProgress(35);
 
-      const worker = await createWorker('por'); // Português
-      setOcrProgress(60);
+      const worker = await createWorker('por');
+      setOcrProgress(65);
 
-      const ret = await worker.recognize(file);
+      const ret = await worker.recognize(fileOrBlob);
       await worker.terminate();
       setOcrProgress(90);
 
@@ -318,10 +431,10 @@ export default function PlanilhaGmaxPage() {
         ...extraido,
         textoCompleto: textoLido
       });
-      notificar('success', 'Foto da NF processada! Verifique os dados lidos e confirme.');
+      notificar('success', 'Foto lida com sucesso! Confira e confirme.');
     } catch (err) {
       console.error('Erro no OCR:', err);
-      notificar('error', 'Não foi possível ler todos os dados da foto automaticamente. Você pode preencher manualmente.');
+      notificar('error', 'Não foi possível ler todos os dados automaticamente. Preencha manualmente.');
       setOcrDadosExtraidos({
         nf: '',
         empresa: '',
@@ -336,10 +449,29 @@ export default function PlanilhaGmaxPage() {
     }
   }
 
+  // SIMULAÇÃO DE TESTE COM 1 CLIQUE
+  function simularTesteLeituraNFe(simulacao) {
+    pararCameraAoVivo();
+    setOcrPreviewUrl('');
+    setShowOcrModal(true);
+    setOcrLoading(true);
+    setOcrProgress(50);
+
+    setTimeout(() => {
+      const extraido = parseDanfeText(simulacao.texto);
+      setOcrDadosExtraidos({
+        ...extraido,
+        textoCompleto: simulacao.texto
+      });
+      setOcrLoading(false);
+      setOcrProgress(100);
+      notificar('success', `Teste simulado carregado com sucesso: ${simulacao.nome}`);
+    }, 600);
+  }
+
   async function confirmarInserirOcrNaPlanilha() {
     if (!ocrDadosExtraidos) return;
 
-    // Encontra a primeira linha vazia para preencher
     let idxVazia = linhas.findIndex((l) => !l.empresa && !l.nf);
     const novasLinhas = [...linhas];
 
@@ -372,8 +504,8 @@ export default function PlanilhaGmaxPage() {
     setShowOcrModal(false);
     setOcrPreviewUrl('');
     setOcrDadosExtraidos(null);
+    pararCameraAoVivo();
 
-    // Salva na nuvem no mesmo instante
     try {
       const idSalvo = await persistirLinhaNoBanco(novaLinha);
       if (idSalvo) {
@@ -392,7 +524,6 @@ export default function PlanilhaGmaxPage() {
     setTimeout(() => setMensagem({ tipo: '', texto: '' }), 4500);
   }
 
-  // Totais
   const totais = useMemo(() => {
     let preenchidas = 0;
     let coletas = 0;
@@ -415,7 +546,6 @@ export default function PlanilhaGmaxPage() {
     return { preenchidas, coletas, transbordos, volumes, pesoTotal, valorTotal };
   }, [linhas]);
 
-  // Exportar CSV exatamente com o nome da semana
   function exportarPlanilhaExcelGmax() {
     const nomeArquivo = `${semanaAtiva.replace(/[^a-zA-Z0-9\s\-]/g, '').trim()}.csv`;
     const csvRows = [];
@@ -444,10 +574,9 @@ export default function PlanilhaGmaxPage() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    notificar('success', `Planilha baixada com o nome: ${nomeArquivo}`);
+    notificar('success', `Planilha baixada: ${nomeArquivo}`);
   }
 
-  // Exportar PDF
   function gerarPdfGmax() {
     const doc = new jsPDF('landscape');
     doc.setFillColor(30, 41, 59);
@@ -513,17 +642,26 @@ export default function PlanilhaGmaxPage() {
         ))}
       </datalist>
 
-      {/* INPUT ESCONDIDO DE CÂMERA DO CELULAR */}
+      {/* 1. INPUT FORÇANDO CÂMERA TRASEIRA (capture="environment") */}
       <input
         type="file"
         accept="image/*"
         capture="environment"
-        ref={cameraInputRef}
-        onChange={handleFotoSelecionada}
+        ref={cameraTraseiraInputRef}
+        onChange={handleArquivoFoto}
         className="hidden"
       />
 
-      {/* TOPO: SELETOR DE SEMANAS + BOTÃO NOVA SEMANA + FOTO DA NF */}
+      {/* 2. INPUT PARA ESCOLHER DA GALERIA / FOTOS JÁ TIRADAS NO CELULAR */}
+      <input
+        type="file"
+        accept="image/*"
+        ref={galeriaInputRef}
+        onChange={handleArquivoFoto}
+        className="hidden"
+      />
+
+      {/* BARRA SUPERIOR EXCEL */}
       <div className="bg-[#107C41] text-white p-4 sm:p-5 rounded-2xl shadow-lg space-y-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -545,15 +683,32 @@ export default function PlanilhaGmaxPage() {
             </div>
           </div>
 
-          {/* BOTÕES DE AÇÃO: CÂMERA DO CELULAR + EXPORTAÇÃO */}
+          {/* BOTÕES DE AÇÃO: CÂMERA TRASEIRA + SIMULAR TESTE + EXPORTAR */}
           <div className="flex flex-wrap items-center gap-2">
-            {/* BOTÃO FOTOGRAFAR NF (PERFEITO PARA O BARRACÃO NO CELULAR) */}
+            {/* BOTÃO CÂMERA TRASEIRA */}
             <button
-              onClick={() => cameraInputRef.current?.click()}
+              onClick={iniciarCameraTraseiraAoVivo}
               className="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black transition-all shadow-md cursor-pointer flex items-center gap-2"
-              title="Tire uma foto da DANFE/NF para preencher a linha automaticamente"
+              title="Abre a câmera traseira do celular para ler a Nota Fiscal"
             >
-              <span className="text-base">📸</span> Tirar Foto da NF (Auto)
+              <span className="text-base">📸</span> Câmera Traseira (NF)
+            </button>
+
+            {/* BOTÃO SELECIONAR FOTO DA GALERIA */}
+            <button
+              onClick={() => galeriaInputRef.current?.click()}
+              className="px-3.5 py-2.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-bold transition-all border border-white/20 cursor-pointer flex items-center gap-1.5"
+              title="Escolher uma foto de NF já tirada no celular"
+            >
+              🖼️ Da Galeria
+            </button>
+
+            {/* BOTÃO SIMULAR TESTES PRONTOS */}
+            <button
+              onClick={() => setShowOcrModal(true)}
+              className="px-3.5 py-2.5 rounded-xl bg-blue-500 hover:bg-blue-400 text-white text-xs font-black transition-all shadow-md cursor-pointer flex items-center gap-1.5"
+            >
+              🧪 Simular Testes de NF
             </button>
 
             <button
@@ -579,7 +734,7 @@ export default function PlanilhaGmaxPage() {
           </div>
         </div>
 
-        {/* ABAS DE SEMANAS (ESTILO GUIA DO EXCEL NA PARTE INFERIOR) */}
+        {/* GUIAS DE SEMANAS */}
         <div className="pt-2 border-t border-white/20 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
           <span className="text-[11px] font-bold uppercase text-white/70 whitespace-nowrap mr-1">
             Semanas:
@@ -615,7 +770,7 @@ export default function PlanilhaGmaxPage() {
         </div>
       )}
 
-      {/* TOTALIZADORES EM TEMPO REAL */}
+      {/* TOTALIZADORES */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 shadow-2xs">
           <span className="text-[10px] font-bold text-slate-400 uppercase">Notas na Semana</span>
@@ -643,12 +798,12 @@ export default function PlanilhaGmaxPage() {
         </div>
       </div>
 
-      {/* GRADE EXATA DO EXCEL */}
+      {/* GRADE EXCEL */}
       <div className="bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-2xl shadow-lg overflow-hidden">
         <div className="bg-slate-100 dark:bg-slate-800 border-b border-slate-300 dark:border-slate-700 px-4 py-2.5 flex items-center justify-between text-xs">
           <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300 font-bold">
             <span>🖱️</span>
-            <span>Grade Semanal: digite direto nas células ou use <strong>📸 Tirar Foto da NF</strong> no celular para preencher rápido no barracão!</span>
+            <span>Grade Semanal: digite direto nas células ou clique em <strong>📸 Câmera Traseira</strong> no celular para preencher em 2 segundos!</span>
           </div>
           <button
             onClick={adicionarLinha}
@@ -689,7 +844,6 @@ export default function PlanilhaGmaxPage() {
                       row.tipo === 'TRANSBORDO' ? 'bg-purple-50/25 dark:bg-purple-950/10' : ''
                     }`}
                   >
-                    {/* COLUNA #: SEQ */}
                     <td className="border-r border-slate-200 dark:border-slate-800 text-center font-mono font-bold text-slate-500 bg-slate-50 dark:bg-slate-800/40 p-0">
                       <input
                         type="text"
@@ -704,7 +858,6 @@ export default function PlanilhaGmaxPage() {
                       />
                     </td>
 
-                    {/* TIPO */}
                     <td className="border-r border-slate-200 dark:border-slate-800 p-0 text-center">
                       <select
                         value={row.tipo || 'COLETA'}
@@ -718,7 +871,6 @@ export default function PlanilhaGmaxPage() {
                       </select>
                     </td>
 
-                    {/* EMPRESA */}
                     <td className="border-r border-slate-200 dark:border-slate-800 p-0">
                       <input
                         type="text"
@@ -734,7 +886,6 @@ export default function PlanilhaGmaxPage() {
                       />
                     </td>
 
-                    {/* Nº NF */}
                     <td className="border-r border-slate-200 dark:border-slate-800 p-0 text-center">
                       <input
                         type="text"
@@ -750,7 +901,6 @@ export default function PlanilhaGmaxPage() {
                       />
                     </td>
 
-                    {/* QTD VOLUME */}
                     <td className="border-r border-slate-200 dark:border-slate-800 p-0 text-center">
                       <input
                         type="number"
@@ -766,7 +916,6 @@ export default function PlanilhaGmaxPage() {
                       />
                     </td>
 
-                    {/* UNIDADE VOLUME */}
                     <td className="border-r border-slate-200 dark:border-slate-800 p-0 text-center font-mono text-[10px] text-slate-400 bg-slate-50 dark:bg-slate-800/30">
                       <input
                         type="text"
@@ -781,7 +930,6 @@ export default function PlanilhaGmaxPage() {
                       />
                     </td>
 
-                    {/* PESO */}
                     <td className="border-r border-slate-200 dark:border-slate-800 p-0 text-right">
                       <input
                         type="text"
@@ -797,7 +945,6 @@ export default function PlanilhaGmaxPage() {
                       />
                     </td>
 
-                    {/* UNIDADE PESO */}
                     <td className="border-r border-slate-200 dark:border-slate-800 p-0 text-center font-mono text-[10px] text-slate-400 bg-slate-50 dark:bg-slate-800/30">
                       <input
                         type="text"
@@ -812,7 +959,6 @@ export default function PlanilhaGmaxPage() {
                       />
                     </td>
 
-                    {/* DATA */}
                     <td className="border-r border-slate-200 dark:border-slate-800 p-0 text-center">
                       <input
                         type="date"
@@ -827,7 +973,6 @@ export default function PlanilhaGmaxPage() {
                       />
                     </td>
 
-                    {/* ORIGEM */}
                     <td className="border-r border-slate-200 dark:border-slate-800 p-0">
                       <input
                         type="text"
@@ -844,7 +989,6 @@ export default function PlanilhaGmaxPage() {
                       />
                     </td>
 
-                    {/* COLETOR */}
                     <td className="border-r border-slate-200 dark:border-slate-800 p-0 text-center">
                       <input
                         type="text"
@@ -860,7 +1004,6 @@ export default function PlanilhaGmaxPage() {
                       />
                     </td>
 
-                    {/* DESTINO */}
                     <td className="border-r border-slate-200 dark:border-slate-800 p-0">
                       <input
                         type="text"
@@ -876,7 +1019,6 @@ export default function PlanilhaGmaxPage() {
                       />
                     </td>
 
-                    {/* VALOR */}
                     <td className="border-r border-slate-200 dark:border-slate-800 p-0 text-right bg-emerald-50/40 dark:bg-emerald-950/20">
                       <input
                         type="text"
@@ -892,7 +1034,6 @@ export default function PlanilhaGmaxPage() {
                       />
                     </td>
 
-                    {/* AÇÃO EXCLUIR */}
                     <td className="p-0 text-center">
                       {(row.empresa || row.nf || row.valor) ? (
                         <button
@@ -932,7 +1073,7 @@ export default function PlanilhaGmaxPage() {
         )}
       </div>
 
-      {/* MODAL: CRIAR NOVA SEMANA */}
+      {/* MODAL: NOVA SEMANA */}
       {showNovaSemanaModal && (
         <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
@@ -978,16 +1119,17 @@ export default function PlanilhaGmaxPage() {
         </div>
       )}
 
-      {/* MODAL: REVISÃO DE FOTO DA NF (OCR AUTOMÁTICO) */}
+      {/* MODAL: CÂMERA TRASEIRA AO VIVO / OCR / SIMULAÇÃO DE TESTE */}
       {showOcrModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-xl w-full shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
               <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                <span>📸</span> Leitura Automática da Foto da NF
+                <span>📸</span> Leitura de Nota Fiscal (Câmera Traseira & OCR)
               </h3>
               <button
                 onClick={() => {
+                  pararCameraAoVivo();
                   setShowOcrModal(false);
                   setOcrDadosExtraidos(null);
                 }}
@@ -997,7 +1139,44 @@ export default function PlanilhaGmaxPage() {
               </button>
             </div>
 
-            {ocrLoading ? (
+            {/* SEÇÃO 1: CÂMERA AO VIVO TRASEIRA (STREAM DE VÍDEO) */}
+            {cameraAtiva && (
+              <div className="space-y-3">
+                <div className="relative rounded-2xl overflow-hidden bg-black aspect-video border-2 border-amber-400 flex items-center justify-center">
+                  <video
+                    ref={videoRef}
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 border-2 border-dashed border-white/50 pointer-events-none m-6 rounded-xl flex items-center justify-center">
+                    <span className="bg-black/60 text-white text-[10px] font-bold px-2 py-1 rounded">
+                      Enquadre a Nota Fiscal / DANFE aqui
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={pararCameraAoVivo}
+                    className="px-4 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-xs font-bold"
+                  >
+                    Cancelar Câmera
+                  </button>
+                  <button
+                    type="button"
+                    onClick={capturarFotoDaCameraAoVivo}
+                    className="px-6 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black shadow-lg cursor-pointer flex items-center gap-2"
+                  >
+                    📸 Capturar Foto e Ler Dados
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* SEÇÃO 2: PROCESSANDO OCR */}
+            {ocrLoading && (
               <div className="py-12 text-center space-y-4">
                 <div className="inline-block animate-spin text-3xl">🔄</div>
                 <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
@@ -1010,11 +1189,14 @@ export default function PlanilhaGmaxPage() {
                   />
                 </div>
               </div>
-            ) : ocrDadosExtraidos ? (
+            )}
+
+            {/* SEÇÃO 3: RESULTADOS IDENTIFICADOS */}
+            {!cameraAtiva && !ocrLoading && ocrDadosExtraidos && (
               <div className="space-y-4">
-                <p className="text-xs text-slate-500">
-                  Os dados foram identificados na foto da NF. Ajuste se necessário e confirme para inserir na planilha:
-                </p>
+                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 rounded-xl text-xs text-emerald-800 dark:text-emerald-200 font-bold flex items-center gap-2">
+                  <span>✅</span> Dados identificados com sucesso! Confira e clique em confirmar:
+                </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="col-span-2">
@@ -1097,12 +1279,11 @@ export default function PlanilhaGmaxPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      setShowOcrModal(false);
                       setOcrDadosExtraidos(null);
                     }}
                     className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold"
                   >
-                    Descartar
+                    Voltar
                   </button>
                   <button
                     type="button"
@@ -1113,7 +1294,30 @@ export default function PlanilhaGmaxPage() {
                   </button>
                 </div>
               </div>
-            ) : null}
+            )}
+
+            {/* SEÇÃO 4: BOTÕES PARA SIMULAR TESTES DE NF COM 1 CLIQUE */}
+            {!cameraAtiva && !ocrLoading && (
+              <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-2">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">
+                  🧪 Testar funcionamento do leitor com simulações de notas fiscais:
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {SIMULACOES_NF.map((sim, i) => (
+                    <button
+                      key={i}
+                      onClick={() => simularTesteLeituraNFe(sim)}
+                      className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-blue-950/40 border border-slate-200 dark:border-slate-700 text-left text-xs font-bold text-slate-700 dark:text-slate-200 cursor-pointer transition-all"
+                    >
+                      <span className="block text-[10px] text-blue-600 dark:text-blue-400 uppercase font-black">
+                        Teste #{i + 1}
+                      </span>
+                      {sim.nome.split(':')[1] || sim.nome}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
