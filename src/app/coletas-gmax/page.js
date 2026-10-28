@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { parseDanfeText } from '@/lib/nfeParser';
 
 const CIDADES_REGIAO = [
   'PIRACICABA',
@@ -34,84 +35,91 @@ const VALORES_PADRAO = {
   'ARARAS': 110
 };
 
-const DADOS_INICIAIS = [
-  { seq: '1', tipo: 'COLETA', empresa: 'LUITEX', nf: '644089', qtd_vol: 1, unid_vol: 'VOL', peso: 0.4, unid_peso: 'KG', data: '2026-10-19', origem: 'AMERICANA', coletor: 'LUIZ', destino: 'DA MATA', valor: 50 },
-  { seq: '2', tipo: 'COLETA', empresa: 'CANEPARTS', nf: '4928', qtd_vol: 1, unid_vol: 'VOL', peso: 0.736, unid_peso: 'KG', data: '2026-10-19', origem: 'PIRACICABA', coletor: 'LUIZ', destino: 'COOP. AGRICOLA', valor: 50 },
-  { seq: '3', tipo: 'COLETA', empresa: 'REZENFLEX', nf: '114955', qtd_vol: 1, unid_vol: 'VOL', peso: 1, unid_peso: 'KG', data: '2026-10-19', origem: 'PIRACICABA', coletor: 'LUIZ', destino: 'AÇUCAR E ALCOOL', valor: 50 },
-  { seq: '4', tipo: 'COLETA', empresa: 'REZENFLEX', nf: '115064', qtd_vol: 2, unid_vol: 'VOL', peso: 46, unid_peso: 'KG', data: '2026-10-19', origem: 'PIRACICABA', coletor: 'LUIZ', destino: 'AÇUCAR E ALCOOL', valor: 50 },
-  { seq: '', tipo: 'COLETA', empresa: 'COLVADIS', nf: '79483', qtd_vol: 1, unid_vol: 'VOL', peso: 4, unid_peso: 'KG', data: '2026-10-19', origem: 'PIRACICABA', coletor: 'LUIZ', destino: 'DA MATA', valor: 50 },
-  { seq: '5', tipo: 'COLETA', empresa: 'UCAF', nf: '25786', qtd_vol: 2, unid_vol: 'VOL', peso: 51, unid_peso: 'KG', data: '2026-10-19', origem: 'PIRACICABA', coletor: 'LUIZ', destino: 'DA MATA', valor: 50 },
-  { seq: '6', tipo: 'COLETA', empresa: 'SEALVALVE', nf: '12631', qtd_vol: 1, unid_vol: 'VOL', peso: 10, unid_peso: 'KG', data: '2026-10-19', origem: 'ARARAS', coletor: 'LUIZ', destino: 'COOP. AGRICOLA', valor: 110 },
-  { seq: '19', tipo: 'COLETA', empresa: 'KRAHENBUHL', nf: '388735', qtd_vol: 1, unid_vol: 'VOL', peso: 160, unid_peso: 'KG', data: '2026-10-19', origem: 'PIRACICABA', coletor: 'LUIZ', destino: 'DA MATA', valor: 50 },
-  { seq: '20', tipo: 'COLETA', empresa: 'KRAHENBUHL', nf: '388872', qtd_vol: 4, unid_vol: 'VOL', peso: 76, unid_peso: 'KG', data: '2026-10-19', origem: 'PIRACICABA', coletor: 'LUIZ', destino: 'DA MATA', valor: 50 },
-  { seq: '21', tipo: 'COLETA', empresa: 'DELTALAB', nf: '53023', qtd_vol: 1, unid_vol: 'VOL', peso: 4.1, unid_peso: 'KG', data: '2026-10-19', origem: 'PIRACICABA', coletor: 'LUIZ', destino: 'AÇUCAR E ALCOOL', valor: 50 },
-  { seq: '22', tipo: 'COLETA', empresa: 'ALUCEL', nf: '90585', qtd_vol: 1, unid_vol: 'VOL', peso: 1, unid_peso: 'KG', data: '2026-10-19', origem: 'PIRACICABA', coletor: 'LUIZ', destino: 'DA MATA', valor: 50 },
-  { seq: '23', tipo: 'COLETA', empresa: 'ALUCEL', nf: '165626', qtd_vol: 3, unid_vol: 'VOL', peso: 16, unid_peso: 'KG', data: '2026-10-19', origem: 'PIRACICABA', coletor: 'LUIZ', destino: 'DA MATA', valor: 50 },
-  { seq: '', tipo: 'COLETA', empresa: 'TRATORCOM', nf: '151794', qtd_vol: 1, unid_vol: 'VOL', peso: 48, unid_peso: 'KG', data: '2026-10-19', origem: 'PIRACICABA', coletor: 'LUIZ', destino: 'COOP. AGRICOLA', valor: 0 },
-  { seq: '24', tipo: 'COLETA', empresa: 'TRATORCOM', nf: '151741', qtd_vol: 1, unid_vol: 'VOL', peso: 0.8, unid_peso: 'KG', data: '2026-10-19', origem: 'PIRACICABA', coletor: 'LUIZ', destino: 'DA MATA', valor: 0 },
-  { seq: '25', tipo: 'COLETA', empresa: 'TRATORCOM', nf: '151803', qtd_vol: 1, unid_vol: 'VOL', peso: 3, unid_peso: 'KG', data: '2026-10-19', origem: 'PIRACICABA', coletor: 'LUIZ', destino: 'COOP. AGRICOLA', valor: 0 },
-  { seq: '26', tipo: 'COLETA', empresa: 'TRATORCOM', nf: '151875', qtd_vol: 1, unid_vol: 'VOL', peso: 5, unid_peso: 'KG', data: '2026-10-19', origem: 'PIRACICABA', coletor: 'LUIZ', destino: 'CRV', valor: 0 },
-  { seq: '27', tipo: 'COLETA', empresa: 'TRATORCOM', nf: '151952', qtd_vol: 1, unid_vol: 'VOL', peso: 2, unid_peso: 'KG', data: '2026-10-19', origem: 'PIRACICABA', coletor: 'LUIZ', destino: 'DA MATA', valor: 0 },
-  { seq: '28', tipo: 'COLETA', empresa: 'TRATORCOM', nf: '151795', qtd_vol: 1, unid_vol: 'VOL', peso: 3, unid_peso: 'KG', data: '2026-10-19', origem: 'PIRACICABA', coletor: 'LUIZ', destino: 'COOP. AGRICOLA', valor: 0 },
-  { seq: '29', tipo: 'COLETA', empresa: 'TRATORCOM', nf: '151796', qtd_vol: 1, unid_vol: 'VOL', peso: 94, unid_peso: 'KG', data: '2026-10-19', origem: 'PIRACICABA', coletor: 'LUIZ', destino: 'COOP. AGRICOLA', valor: 160 },
-  { seq: '30', tipo: 'COLETA', empresa: 'UNIMIL', nf: '348003', qtd_vol: 2, unid_vol: 'VOL', peso: 18.38, unid_peso: 'KG', data: '2026-10-19', origem: 'PIRACICABA', coletor: 'LUIZ', destino: 'COOP. AGRICOLA', valor: 0 },
-  { seq: '31', tipo: 'COLETA', empresa: 'UNIMIL', nf: '348127', qtd_vol: 2, unid_vol: 'VOL', peso: 47.44, unid_peso: 'KG', data: '2026-10-19', origem: 'PIRACICABA', coletor: 'LUIZ', destino: 'ITAMARATI', valor: 0 },
-  { seq: '32', tipo: 'COLETA', empresa: 'UNIMIL', nf: '348099', qtd_vol: 3, unid_vol: 'VOL', peso: 46.64, unid_peso: 'KG', data: '2026-10-19', origem: 'PIRACICABA', coletor: 'LUIZ', destino: 'COOP. AGRICOLA', valor: 0 },
-  { seq: '33', tipo: 'COLETA', empresa: 'UNIMIL', nf: '348142', qtd_vol: 9, unid_vol: 'VOL', peso: 62.28, unid_peso: 'KG', data: '2026-10-19', origem: 'PIRACICABA', coletor: 'LUIZ', destino: 'ITAMARATI', valor: 160 },
-  { seq: '34', tipo: 'COLETA', empresa: 'BIOCHIMECAL', nf: '39817', qtd_vol: 6, unid_vol: 'VOL', peso: 60, unid_peso: 'KG', data: '2026-10-20', origem: 'SUMARE', coletor: 'LUIZ', destino: 'BARRALCOOL', valor: 50 },
-  { seq: '35', tipo: 'COLETA', empresa: 'AZTRA', nf: '174', qtd_vol: 1, unid_vol: 'VOL', peso: 37, unid_peso: 'KG', data: '2026-10-20', origem: 'PIRACICABA', coletor: 'LUIZ', destino: 'SERTMAX', valor: 50 },
-  { seq: '36', tipo: 'COLETA', empresa: 'SALARINOX', nf: '28606', qtd_vol: 1, unid_vol: 'VOL', peso: 13.532, unid_peso: 'KG', data: '2026-10-20', origem: 'PIRACICABA', coletor: 'LUIZ', destino: 'COOP. AGRICOLA', valor: 50 },
-  { seq: '37', tipo: 'COLETA', empresa: 'SALARINOX', nf: '28597', qtd_vol: 1, unid_vol: 'VOL', peso: 4.5, unid_peso: 'KG', data: '2026-10-20', origem: 'PIRACICABA', coletor: 'LUIZ', destino: 'COOP. AGRICOLA', valor: 50 },
-  { seq: '38', tipo: 'COLETA', empresa: 'APOLINOX', nf: '2289', qtd_vol: 1, unid_vol: 'VOL', peso: 140, unid_peso: 'KG', data: '2026-10-20', origem: 'PIRACICABA', coletor: 'LUIZ', destino: 'COOP. AGRICOLA', valor: 50 },
-  { seq: '39', tipo: 'COLETA', empresa: 'ELEPIRA', nf: '282485', qtd_vol: 2, unid_vol: 'VOL', peso: 30, unid_peso: 'KG', data: '2026-10-20', origem: 'PIRACICABA', coletor: 'LUIZ', destino: 'DA MATA', valor: 50 },
-  { seq: '40', tipo: 'COLETA', empresa: 'TRATORCOM', nf: '152008', qtd_vol: 1, unid_vol: 'VOL', peso: 2, unid_peso: 'KG', data: '2026-10-20', origem: 'PIRACICABA', coletor: 'LUIZ', destino: 'CRV', valor: 50 },
-  { seq: '41', tipo: 'COLETA', empresa: 'TRATORCOM', nf: '151983', qtd_vol: 1, unid_vol: 'VOL', peso: 340, unid_peso: 'KG', data: '2026-10-20', origem: 'PIRACICABA', coletor: 'LUIZ', destino: 'CRV', valor: 50 },
-  { seq: '42', tipo: 'COLETA', empresa: 'INOXRIO', nf: '19491', qtd_vol: 3, unid_vol: 'VOL', peso: 30, unid_peso: 'KG', data: '2026-10-20', origem: 'PIRACICABA', coletor: 'LUIZ', destino: 'NOVA GALIA', valor: 50 },
-  { seq: '43', tipo: 'COLETA', empresa: 'DIMENSIONAL', nf: '589281', qtd_vol: 1, unid_vol: 'VOL', peso: 50, unid_peso: 'KG', data: '2026-10-20', origem: 'LIMEIRA', coletor: 'LUIZ', destino: 'COMP. AGRICOLA', valor: 50 },
-  { seq: '44', tipo: 'COLETA', empresa: 'RAESA', nf: '32535', qtd_vol: 1, unid_vol: 'VOL', peso: 8.45, unid_peso: 'KG', data: '2026-10-20', origem: 'ARARAS', coletor: 'LUIZ', destino: 'DA MATA', valor: 110 },
-  { seq: '45', tipo: 'COLETA', empresa: 'RAESA', nf: '32538', qtd_vol: 1, unid_vol: 'VOL', peso: 0.52, unid_peso: 'KG', data: '2026-10-20', origem: 'ARARAS', coletor: 'LUIZ', destino: 'CIA CANAVIEIRA', valor: 110 },
-  { seq: '46', tipo: 'TRANSBORDO', empresa: 'ANASTACIO', nf: '6180', qtd_vol: 20, unid_vol: 'VOL', peso: 510, unid_peso: 'KG', data: '2026-10-20', origem: 'LOUVEIRA', coletor: 'GMAX', destino: 'CJ SELECTA', valor: 0 },
-  { seq: '47', tipo: 'TRANSBORDO', empresa: 'AÇOFERA', nf: '250555', qtd_vol: 2, unid_vol: 'VOL', peso: 1062, unid_peso: 'KG', data: '2026-10-20', origem: 'LIMEIRA', coletor: 'GMAX', destino: 'CRV', valor: 0 },
-  { seq: '48', tipo: 'TRANSBORDO', empresa: 'AÇOFERA', nf: '250557', qtd_vol: 1, unid_vol: 'VOL', peso: 17, unid_peso: 'KG', data: '2026-10-20', origem: 'LIMEIRA', coletor: 'GMAX', destino: 'CIA AGRICOLA', valor: 0 },
-  { seq: '49', tipo: 'TRANSBORDO', empresa: 'AÇOFERA', nf: '250559', qtd_vol: 1, unid_vol: 'VOL', peso: 260, unid_peso: 'KG', data: '2026-10-20', origem: 'LIMEIRA', coletor: 'GMAX', destino: 'COOP. AGRICOLA', valor: 0 },
-  { seq: '50', tipo: 'TRANSBORDO', empresa: 'AÇOFERA', nf: '250560', qtd_vol: 1, unid_vol: 'VOL', peso: 236, unid_peso: 'KG', data: '2026-10-20', origem: 'LIMEIRA', coletor: 'GMAX', destino: 'COOP. AGRICOLA', valor: 0 },
-  { seq: '51', tipo: 'TRANSBORDO', empresa: 'AÇOFERA', nf: '250556', qtd_vol: 1, unid_vol: 'VOL', peso: 683, unid_peso: 'KG', data: '2026-10-20', origem: 'LIMEIRA', coletor: 'GMAX', destino: 'CRV', valor: 0 },
-  { seq: '52', tipo: 'TRANSBORDO', empresa: 'VI', nf: '264211', qtd_vol: 2, unid_vol: 'VOL', peso: 16, unid_peso: 'KG', data: '2026-10-20', origem: 'GUARULHOS', coletor: 'GMAX', destino: 'ALINE LUCIA', valor: 0 },
-  { seq: '53', tipo: 'TRANSBORDO', empresa: 'VI', nf: '264212', qtd_vol: 6, unid_vol: 'VOL', peso: 519, unid_peso: 'KG', data: '2026-10-20', origem: 'GUARULHOS', coletor: 'GMAX', destino: 'CARAMURU', valor: 0 },
-  { seq: '54', tipo: 'TRANSBORDO', empresa: 'VI', nf: '264213', qtd_vol: 41, unid_vol: 'VOL', peso: 2780, unid_peso: 'KG', data: '2026-10-20', origem: 'GUARULHOS', coletor: 'GMAX', destino: 'CARAMURU', valor: 0 },
-  { seq: '55', tipo: 'TRANSBORDO', empresa: 'BRV', nf: '32716', qtd_vol: 1, unid_vol: 'VOL', peso: 325, unid_peso: 'KG', data: '2026-10-20', origem: 'PIRACICABA', coletor: 'GMAX', destino: 'COOP. AGRICOLA', valor: 0 },
-  { seq: '56', tipo: 'TRANSBORDO', empresa: 'PEU', nf: '348481', qtd_vol: 1, unid_vol: 'VOL', peso: 788, unid_peso: 'KG', data: '2026-10-20', origem: 'PIRACICABA', coletor: 'GMAX', destino: 'SONORA', valor: 0 },
-  { seq: '57', tipo: 'TRANSBORDO', empresa: 'SAFETECH', nf: '11724', qtd_vol: 2, unid_vol: 'VOL', peso: 45, unid_peso: 'VOL', data: '2026-10-20', origem: 'INDAIATUBA', coletor: 'GMAX', destino: 'SONORA', valor: 0 },
-  { seq: '58', tipo: 'TRANSBORDO', empresa: 'SAFETECH', nf: '11709', qtd_vol: 1, unid_vol: 'VOL', peso: 0.24, unid_peso: 'KG', data: '2026-10-20', origem: 'INDAIATUBA', coletor: 'GMAX', destino: 'COOP. AGRICOLA', valor: 0 },
-  { seq: '59', tipo: 'TRANSBORDO', empresa: 'DINAMICA', nf: '111976', qtd_vol: 1, unid_vol: 'VOL', peso: 4.6, unid_peso: 'KG', data: '2026-10-20', origem: 'INDAIATUBA', coletor: 'GMAX', destino: 'SCHEFFER', valor: 0 },
-  { seq: '60', tipo: 'TRANSBORDO', empresa: 'NATINALFLEX', nf: '8861', qtd_vol: 3, unid_vol: 'VOL', peso: 45, unid_peso: 'KG', data: '2026-10-20', origem: 'ITUPEVA', coletor: 'GMAX', destino: 'CRV', valor: 0 },
-  { seq: '61', tipo: 'TRANSBORDO', empresa: 'ENGINSTREL', nf: '23963', qtd_vol: 1, unid_vol: 'VOL', peso: 15, unid_peso: 'KG', data: '2026-10-20', origem: 'SOROCABA', coletor: 'GMAX', destino: 'NOVA GALIA', valor: 0 },
-  { seq: '62', tipo: 'TRANSBORDO', empresa: 'SAFETECH', nf: '11702', qtd_vol: 2, unid_vol: 'VOL', peso: 10, unid_peso: 'KG', data: '2026-10-20', origem: 'INDAIATUBA', coletor: 'GMAX', destino: 'COOP. AGRICOLA', valor: 0 },
-  { seq: '63', tipo: 'TRANSBORDO', empresa: 'SAFETECH', nf: '11665', qtd_vol: 1, unid_vol: 'VOL', peso: 0.2, unid_peso: 'KG', data: '2026-10-20', origem: 'INDAIATUBA', coletor: 'GMAX', destino: 'ACUCAR E ALCOOL', valor: 0 },
-  { seq: '64', tipo: 'TRANSBORDO', empresa: 'HEXIS', nf: '1046337', qtd_vol: 1, unid_vol: 'VOL', peso: 1.92, unid_peso: 'KG', data: '2026-10-20', origem: 'JUNDIAI', coletor: 'GMAX', destino: 'NOVA GALIA', valor: 0 },
-  { seq: '65', tipo: 'COLETA', empresa: 'LUITEX', nf: '644826', qtd_vol: 1, unid_vol: 'VOL', peso: 12, unid_peso: 'KG', data: '2026-10-21', origem: 'SUMARE', coletor: 'LUIZ', destino: 'BARRALCOOL', valor: 50 },
-  { seq: '66', tipo: 'COLETA', empresa: 'LUITEX', nf: '644829', qtd_vol: 1, unid_vol: 'VOL', peso: 0.6, unid_peso: 'KG', data: '2026-10-21', origem: 'SUMARE', coletor: 'LUIZ', destino: 'CRV', valor: 50 },
-  { seq: '67', tipo: 'COLETA', empresa: 'LEMAGI', nf: '7636', qtd_vol: 1, unid_vol: 'VOL', peso: 17.5, unid_peso: 'KG', data: '2026-10-21', origem: 'LIMEIRA', coletor: 'LUIZ', destino: 'COOP. AGRICOLA', valor: 50 },
-  { seq: '68', tipo: 'COLETA', empresa: 'MATISA', nf: '73317', qtd_vol: 2, unid_vol: 'VOL', peso: 40, unid_peso: 'KG', data: '2026-10-21', origem: 'LIMEIRA', coletor: 'LUIZ', destino: 'BARRALCOOL', valor: 50 },
-  { seq: '69', tipo: 'COLETA', empresa: 'DIMENSIONAL', nf: '588647', qtd_vol: 2, unid_vol: 'VOL', peso: 18, unid_peso: 'KG', data: '2026-10-21', origem: 'LIMEIRA', coletor: 'LUIZ', destino: 'CRV', valor: 50 },
-  { seq: '70', tipo: 'COLETA', empresa: 'SETORIAL', nf: '44274', qtd_vol: 1, unid_vol: 'VOL', peso: 11, unid_peso: 'KG', data: '2026-10-21', origem: 'LIMEIRA', coletor: 'LUIZ', destino: 'DA MATA', valor: 50 },
-  { seq: '71', tipo: 'COLETA', empresa: 'PG', nf: '15749', qtd_vol: 1, unid_vol: 'VOL', peso: 15, unid_peso: 'KG', data: '2026-10-21', origem: 'ARARAS', coletor: 'LUIZ', destino: 'COOP. AGRICOLA', valor: 110 }
-];
+// Gera rótulo da semana atual formatada ex: "SEMANA 26/10/26 A 30/10/26"
+function getRotuloSemanaAtual() {
+  const agora = new Date();
+  const diaSemana = agora.getDay(); // 0 Dom, 1 Seg, ..., 5 Sex
+  // Calcula a segunda-feira da semana
+  const diffSegunda = diaSemana === 0 ? -6 : 1 - diaSemana;
+  const segunda = new Date(agora);
+  segunda.setDate(agora.getDate() + diffSegunda);
 
-export default function PlanilhaGmaxExcelPage() {
-  const [semana, setSemana] = useState('GMAX TRANSPORTES SEMANA 19/10/26 ATÉ 23/10/26');
+  const sexta = new Date(segunda);
+  sexta.setDate(segunda.getDate() + 4);
+
+  const fmt = (d) => {
+    const dia = String(d.getDate()).padStart(2, '0');
+    const mes = String(d.getMonth() + 1).padStart(2, '0');
+    const ano = String(d.getFullYear()).slice(-2);
+    return `${dia}/${mes}/${ano}`;
+  };
+
+  return `COLETAS GMAX - SEMANA ${fmt(segunda)} A ${fmt(sexta)}`;
+}
+
+export default function PlanilhaGmaxPage() {
+  const [semanasDisponiveis, setSemanasDisponiveis] = useState([]);
+  const [semanaAtiva, setSemanaAtiva] = useState(getRotuloSemanaAtual());
   const [linhas, setLinhas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [savingStatus, setSavingStatus] = useState('Salvo na Nuvem');
-  const [activeCell, setActiveCell] = useState({ row: null, col: null });
-  const [mensagem, setMensagem] = useState('');
+  const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
 
-  // Ao carregar, busca as linhas salvas no Supabase ou inicializa com a grade completa do Excel
+  // Modal para criar nova semana
+  const [showNovaSemanaModal, setShowNovaSemanaModal] = useState(false);
+  const [nomeNovaSemana, setNomeNovaSemana] = useState('');
+
+  // Câmera / Leitor de Foto da NFe (OCR no Celular / Desktop)
+  const [ocrLoading, setOcrLoading] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState(0);
+  const [showOcrModal, setShowOcrModal] = useState(false);
+  const [ocrPreviewUrl, setOcrPreviewUrl] = useState('');
+  const [ocrDadosExtraidos, setOcrDadosExtraidos] = useState(null);
+  const cameraInputRef = useRef(null);
+
+  // Carrega a lista de semanas salvas
   useEffect(() => {
-    carregarGradeSupabase();
-  }, [semana]);
+    carregarSemanas();
+  }, []);
 
-  async function carregarGradeSupabase() {
+  // Quando muda a semana ativa, carrega as linhas correspondentes
+  useEffect(() => {
+    if (semanaAtiva) {
+      carregarLinhasDaSemana(semanaAtiva);
+    }
+  }, [semanaAtiva]);
+
+  async function carregarSemanas() {
+    try {
+      const { data } = await supabase
+        .from('cotacoes')
+        .select('descricao')
+        .ilike('descricao', 'GMAX_EXCEL:%');
+
+      const setSem = new Set();
+      setSem.add(getRotuloSemanaAtual());
+      setSem.add('COLETAS GMAX - SEMANA 19/10/26 A 23/10/26');
+
+      if (data) {
+        data.forEach((d) => {
+          try {
+            const parsed = JSON.parse(d.descricao.replace('GMAX_EXCEL:', ''));
+            if (parsed.semana_nome) setSem.add(parsed.semana_nome);
+          } catch (e) {}
+        });
+      }
+
+      const lista = Array.from(setSem);
+      setSemanasDisponiveis(lista);
+      if (!lista.includes(semanaAtiva)) {
+        setSemanaAtiva(lista[0]);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function carregarLinhasDaSemana(nomeSemana) {
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -122,47 +130,36 @@ export default function PlanilhaGmaxExcelPage() {
 
       if (error) throw error;
 
-      if (data && data.length > 0) {
-        const mapeados = data.map((d) => {
+      const linhasFiltradas = [];
+      if (data) {
+        data.forEach((d) => {
           try {
             const raw = JSON.parse(d.descricao.replace('GMAX_EXCEL:', ''));
-            return { dbId: d.id, ...raw };
-          } catch (e) {
-            return { dbId: d.id, seq: '', tipo: 'COLETA', empresa: d.cliente || '', nf: d.nota_fiscal || '', qtd_vol: 1, unid_vol: 'VOL', peso: 0, unid_peso: 'KG', data: d.previsao_entrega || '', origem: d.origem || '', coletor: d.motorista_nome || '', destino: d.destino || '', valor: d.valor || 0 };
-          }
+            const sem = raw.semana_nome || 'COLETAS GMAX - SEMANA 19/10/26 A 23/10/26';
+            if (sem === nomeSemana) {
+              linhasFiltradas.push({ dbId: d.id, ...raw });
+            }
+          } catch (e) {}
         });
-        // Completa com linhas vazias para sempre ter visual de planilha grande
-        while (mapeados.length < 75) {
-          mapeados.push(criarLinhaVazia(mapeados.length + 1));
-        }
-        setLinhas(mapeados);
-      } else {
-        // Inicializa com os dados reais da semana 19/10 a 23/10
-        const inicial = DADOS_INICIAIS.map((item, idx) => ({
-          dbId: null,
-          ...item
-        }));
-        while (inicial.length < 75) {
-          inicial.push(criarLinhaVazia(inicial.length + 1));
-        }
-        setLinhas(inicial);
-        // Salva automaticamente em segundo plano para persistir no banco
-        salvarLinhasEmLote(inicial.filter(l => l.empresa || l.nf));
       }
+
+      // Garante sempre um mínimo de 30 linhas na grade para digitação ágil
+      while (linhasFiltradas.length < 35) {
+        linhasFiltradas.push(criarLinhaVazia(linhasFiltradas.length + 1, nomeSemana));
+      }
+      setLinhas(linhasFiltradas);
     } catch (err) {
       console.error(err);
-      // Fallback local se banco offline
-      const inicial = DADOS_INICIAIS.map((item) => ({ dbId: null, ...item }));
-      while (inicial.length < 75) inicial.push(criarLinhaVazia(inicial.length + 1));
-      setLinhas(inicial);
+      notificar('error', 'Erro ao carregar dados da semana.');
     } finally {
       setLoading(false);
     }
   }
 
-  function criarLinhaVazia(seqIndex) {
+  function criarLinhaVazia(seqIndex, semNome = semanaAtiva) {
     return {
       dbId: null,
+      semana_nome: semNome,
       seq: '',
       tipo: 'COLETA',
       empresa: '',
@@ -179,12 +176,11 @@ export default function PlanilhaGmaxExcelPage() {
     };
   }
 
-  // Salvamento individual imediato ao sair de qualquer célula (onBlur) ou pressionar Enter
+  // Atualização de célula com salvamento automático imediato no Supabase
   async function atualizarCelula(index, campo, valor) {
     const novasLinhas = [...linhas];
-    const linhaAtual = { ...novasLinhas[index], [campo]: valor };
+    const linhaAtual = { ...novasLinhas[index], [campo]: valor, semana_nome: semanaAtiva };
 
-    // Auto-preenchimento inteligente de valores padrão e coletores
     if (campo === 'origem') {
       const origUpper = String(valor).toUpperCase();
       linhaAtual.origem = origUpper;
@@ -210,7 +206,7 @@ export default function PlanilhaGmaxExcelPage() {
     novasLinhas[index] = linhaAtual;
     setLinhas(novasLinhas);
 
-    // Se tiver pelo menos Empresa ou NF ou for uma linha com dbId existente, salva no Supabase na hora!
+    // Salva no banco se houver dados mínimos preenchidos
     if (linhaAtual.empresa || linhaAtual.nf || linhaAtual.dbId) {
       setSavingStatus('Salvando...');
       try {
@@ -254,44 +250,149 @@ export default function PlanilhaGmaxExcelPage() {
     return linha.dbId;
   }
 
-  async function salvarLinhasEmLote(itensParaSalvar) {
-    for (const item of itensParaSalvar) {
-      try {
-        await persistirLinhaNoBanco(item);
-      } catch (err) {
-        console.error('Erro lote:', err);
-      }
+  function handleCriarNovaSemana(e) {
+    e.preventDefault();
+    const nomeLimpo = nomeNovaSemana.trim().toUpperCase();
+    if (!nomeLimpo) return;
+
+    if (!semanasDisponiveis.includes(nomeLimpo)) {
+      setSemanasDisponiveis([nomeLimpo, ...semanasDisponiveis]);
     }
+    setSemanaAtiva(nomeLimpo);
+    setNomeNovaSemana('');
+    setShowNovaSemanaModal(false);
+    notificar('success', `Nova planilha criada: ${nomeLimpo}`);
   }
 
-  function adicionarNovaLinha() {
-    setLinhas([...linhas, criarLinhaVazia(linhas.length + 1)]);
+  function adicionarLinha() {
+    setLinhas([...linhas, criarLinhaVazia(linhas.length + 1, semanaAtiva)]);
   }
 
-  async function limparOuExcluirLinha(index) {
+  async function excluirLinha(index) {
     const linha = linhas[index];
     if (linha.dbId) {
-      if (confirm(`Deseja apagar a linha da NF ${linha.nf || index + 1}?`)) {
+      if (confirm(`Remover lançamento da NF ${linha.nf || index + 1}?`)) {
         await supabase.from('cotacoes').delete().eq('id', linha.dbId);
         const copy = [...linhas];
         copy.splice(index, 1);
-        copy.push(criarLinhaVazia(copy.length + 1));
+        copy.push(criarLinhaVazia(copy.length + 1, semanaAtiva));
         setLinhas(copy);
-        notificar('Linha removida do banco de dados.');
+        notificar('success', 'Lançamento excluído com sucesso.');
       }
     } else {
       const copy = [...linhas];
-      copy[index] = criarLinhaVazia(index + 1);
+      copy[index] = criarLinhaVazia(index + 1, semanaAtiva);
       setLinhas(copy);
     }
   }
 
-  function notificar(texto) {
-    setMensagem(texto);
-    setTimeout(() => setMensagem(''), 4500);
+  // ==========================================
+  // FOTO DA NOTA FISCAL COM OCR E PREENCHIMENTO AUTOMÁTICO
+  // ==========================================
+  async function handleFotoSelecionada(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const preview = URL.createObjectURL(file);
+    setOcrPreviewUrl(preview);
+    setShowOcrModal(true);
+    setOcrLoading(true);
+    setOcrProgress(10);
+
+    try {
+      // Import dinâmico do Tesseract para máxima performance
+      const { createWorker } = await import('tesseract.js');
+      setOcrProgress(30);
+
+      const worker = await createWorker('por'); // Português
+      setOcrProgress(60);
+
+      const ret = await worker.recognize(file);
+      await worker.terminate();
+      setOcrProgress(90);
+
+      const textoLido = ret.data.text;
+      const extraido = parseDanfeText(textoLido);
+
+      setOcrDadosExtraidos({
+        ...extraido,
+        textoCompleto: textoLido
+      });
+      notificar('success', 'Foto da NF processada! Verifique os dados lidos e confirme.');
+    } catch (err) {
+      console.error('Erro no OCR:', err);
+      notificar('error', 'Não foi possível ler todos os dados da foto automaticamente. Você pode preencher manualmente.');
+      setOcrDadosExtraidos({
+        nf: '',
+        empresa: '',
+        origem: 'PIRACICABA',
+        destino: '',
+        peso: '',
+        qtdVol: '1'
+      });
+    } finally {
+      setOcrLoading(false);
+      setOcrProgress(100);
+    }
   }
 
-  // Totais calculados em tempo real na barra inferior do Excel
+  async function confirmarInserirOcrNaPlanilha() {
+    if (!ocrDadosExtraidos) return;
+
+    // Encontra a primeira linha vazia para preencher
+    let idxVazia = linhas.findIndex((l) => !l.empresa && !l.nf);
+    const novasLinhas = [...linhas];
+
+    const novaLinha = {
+      dbId: null,
+      semana_nome: semanaAtiva,
+      seq: idxVazia !== -1 ? String(idxVazia + 1) : String(linhas.length + 1),
+      tipo: 'COLETA',
+      empresa: ocrDadosExtraidos.empresa || 'NOVA COLETA',
+      nf: ocrDadosExtraidos.nf || '',
+      qtd_vol: ocrDadosExtraidos.qtdVol || '1',
+      unid_vol: 'VOL',
+      peso: ocrDadosExtraidos.peso || '',
+      unid_peso: 'KG',
+      data: new Date().toISOString().split('T')[0],
+      origem: ocrDadosExtraidos.origem || 'PIRACICABA',
+      coletor: 'LUIZ',
+      destino: ocrDadosExtraidos.destino || '',
+      valor: VALORES_PADRAO[ocrDadosExtraidos.origem] || 50
+    };
+
+    if (idxVazia !== -1) {
+      novasLinhas[idxVazia] = novaLinha;
+    } else {
+      novasLinhas.push(novaLinha);
+      idxVazia = novasLinhas.length - 1;
+    }
+
+    setLinhas(novasLinhas);
+    setShowOcrModal(false);
+    setOcrPreviewUrl('');
+    setOcrDadosExtraidos(null);
+
+    // Salva na nuvem no mesmo instante
+    try {
+      const idSalvo = await persistirLinhaNoBanco(novaLinha);
+      if (idSalvo) {
+        novaLinha.dbId = idSalvo;
+        novasLinhas[idxVazia] = novaLinha;
+        setLinhas([...novasLinhas]);
+      }
+      notificar('success', `NF ${novaLinha.nf || ''} (${novaLinha.empresa}) inserida e salva na planilha!`);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  function notificar(tipo, texto) {
+    setMensagem({ tipo, texto });
+    setTimeout(() => setMensagem({ tipo: '', texto: '' }), 4500);
+  }
+
+  // Totais
   const totais = useMemo(() => {
     let preenchidas = 0;
     let coletas = 0;
@@ -305,7 +406,6 @@ export default function PlanilhaGmaxExcelPage() {
         preenchidas++;
         if (l.tipo === 'TRANSBORDO') transbordos++;
         else coletas++;
-
         volumes += parseFloat(l.qtd_vol || 0);
         pesoTotal += parseFloat(String(l.peso || 0).replace(',', '.'));
         valorTotal += parseFloat(String(l.valor || 0).replace(',', '.'));
@@ -315,11 +415,12 @@ export default function PlanilhaGmaxExcelPage() {
     return { preenchidas, coletas, transbordos, volumes, pesoTotal, valorTotal };
   }, [linhas]);
 
-  // Exportar exatamente o arquivo CSV/Excel que a GMAX recebe
-  function baixarArquivoExcelGmax() {
+  // Exportar CSV exatamente com o nome da semana
+  function exportarPlanilhaExcelGmax() {
+    const nomeArquivo = `${semanaAtiva.replace(/[^a-zA-Z0-9\s\-]/g, '').trim()}.csv`;
     const csvRows = [];
     csvRows.push(',,,,,,,,,,,,');
-    csvRows.push(`,TIPO DO SERVIÇO,${semana},,,,,,,,,,`);
+    csvRows.push(`,TIPO DO SERVIÇO,${semanaAtiva},,,,,,,,,,`);
     csvRows.push(',,EMPRESA,Nº NF,QTD VOLUME,,PESO,,DATA,ORIGEM,COLETOR,DESTINO,VALOR');
 
     linhas.forEach((r, idx) => {
@@ -339,26 +440,26 @@ export default function PlanilhaGmaxExcelPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `${semana.replace(/[^a-zA-Z0-9]/g, '_')}.csv`);
+    link.setAttribute('download', nomeArquivo);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    notificar('Planilha Excel baixada com sucesso no padrão exato da GMAX!');
+    notificar('success', `Planilha baixada com o nome: ${nomeArquivo}`);
   }
 
-  // Exportar PDF do borderô semanal
+  // Exportar PDF
   function gerarPdfGmax() {
     const doc = new jsPDF('landscape');
     doc.setFillColor(30, 41, 59);
     doc.rect(0, 0, 297, 24, 'F');
 
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(14);
+    doc.setFontSize(13);
     doc.setFont('helvetica', 'bold');
-    doc.text(`PS LOGÍSTICA — BORDERÔ DE COLETAS E TRANSBORDOS`, 14, 12);
+    doc.text(`PS LOGÍSTICA — BORDERÔ DE COLETAS E TRANSBORDOS GMAX`, 14, 11);
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
-    doc.text(`${semana}   |   Emitido em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 19);
+    doc.text(`${semanaAtiva}   |   Emitido em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 18);
 
     const body = linhas
       .filter((l) => l.empresa || l.nf)
@@ -378,7 +479,7 @@ export default function PlanilhaGmaxExcelPage() {
 
     autoTable(doc, {
       startY: 28,
-      head: [['#', 'TIPO', 'EMPRESA', 'Nº NF', 'VOLUME', 'PESO', 'DATA', 'ORIGEM', 'COLETOR', 'DESTINO', 'VALOR']],
+      head: [['#', 'TIPO', 'EMPRESA', 'Nº NF', 'VOL', 'PESO', 'DATA', 'ORIGEM', 'COLETOR', 'DESTINO', 'VALOR']],
       body,
       theme: 'grid',
       headStyles: { fillColor: [37, 99, 235], fontSize: 8 },
@@ -386,7 +487,7 @@ export default function PlanilhaGmaxExcelPage() {
       foot: [[
         '',
         'RESUMO',
-        `${totais.preenchidas} LANÇAMENTOS`,
+        `${totais.preenchidas} NOTAS FISCAIS`,
         '',
         `${totais.volumes} VOL`,
         `${totais.pesoTotal.toFixed(2)} KG`,
@@ -399,114 +500,168 @@ export default function PlanilhaGmaxExcelPage() {
       footStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold' }
     });
 
-    doc.save(`GMAX_Planilha_${new Date().toISOString().split('T')[0]}.pdf`);
-    notificar('Relatório PDF gerado para envio por e-mail!');
+    const nomePdf = `${semanaAtiva.replace(/[^a-zA-Z0-9\s\-]/g, '').trim()}.pdf`;
+    doc.save(nomePdf);
+    notificar('success', `PDF gerado com sucesso: ${nomePdf}`);
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-12">
       <datalist id="cidades-regiao-sugestoes">
         {CIDADES_REGIAO.map((c) => (
           <option key={c} value={c} />
         ))}
       </datalist>
 
-      {/* BARRA SUPERIOR ESTILO MICROSOFT EXCEL / GOOGLE SHEETS */}
-      <div className="bg-[#107C41] text-white p-4 rounded-2xl shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-white text-[#107C41] rounded-xl flex items-center justify-center font-black text-xl shadow-md">
-            XLS
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-extrabold uppercase bg-white/20 px-2.5 py-0.5 rounded-full tracking-wider">
-                Planilha Eletrônica GMAX Transportes
-              </span>
-              <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full ${savingStatus === 'Salvando...' ? 'bg-amber-400 text-slate-950 animate-pulse' : 'bg-emerald-300 text-emerald-950'}`}>
-                ● {savingStatus}
-              </span>
+      {/* INPUT ESCONDIDO DE CÂMERA DO CELULAR */}
+      <input
+        type="file"
+        accept="image/*"
+        capture="environment"
+        ref={cameraInputRef}
+        onChange={handleFotoSelecionada}
+        className="hidden"
+      />
+
+      {/* TOPO: SELETOR DE SEMANAS + BOTÃO NOVA SEMANA + FOTO DA NF */}
+      <div className="bg-[#107C41] text-white p-4 sm:p-5 rounded-2xl shadow-lg space-y-4">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-white text-[#107C41] rounded-2xl flex items-center justify-center font-black text-2xl shadow-md shrink-0">
+              XLS
             </div>
-            <input
-              type="text"
-              value={semana}
-              onChange={(e) => setSemana(e.target.value.toUpperCase())}
-              className="bg-transparent text-lg font-black text-white hover:bg-white/10 px-2 py-0.5 rounded-lg border border-transparent hover:border-white/30 focus:bg-white/20 focus:outline-none transition-all mt-0.5 w-full max-w-xl"
-              title="Clique para editar o título da semana"
-            />
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-extrabold uppercase bg-white/20 px-2.5 py-0.5 rounded-full tracking-wider">
+                  Controle Semanal GMAX
+                </span>
+                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${savingStatus === 'Salvando...' ? 'bg-amber-400 text-slate-950 animate-pulse' : 'bg-emerald-300 text-emerald-950'}`}>
+                  ● {savingStatus}
+                </span>
+              </div>
+              <h1 className="text-xl sm:text-2xl font-black text-white mt-0.5">
+                {semanaAtiva}
+              </h1>
+            </div>
+          </div>
+
+          {/* BOTÕES DE AÇÃO: CÂMERA DO CELULAR + EXPORTAÇÃO */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* BOTÃO FOTOGRAFAR NF (PERFEITO PARA O BARRACÃO NO CELULAR) */}
+            <button
+              onClick={() => cameraInputRef.current?.click()}
+              className="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black transition-all shadow-md cursor-pointer flex items-center gap-2"
+              title="Tire uma foto da DANFE/NF para preencher a linha automaticamente"
+            >
+              <span className="text-base">📸</span> Tirar Foto da NF (Auto)
+            </button>
+
+            <button
+              onClick={() => setShowNovaSemanaModal(true)}
+              className="px-3.5 py-2.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-bold transition-all border border-white/20 cursor-pointer flex items-center gap-1.5"
+            >
+              📅 + Nova Semana
+            </button>
+
+            <button
+              onClick={exportarPlanilhaExcelGmax}
+              className="px-4 py-2.5 rounded-xl bg-white text-[#107C41] hover:bg-emerald-50 text-xs font-black transition-all shadow-md cursor-pointer flex items-center gap-1.5"
+            >
+              📊 Baixar Planilha (.csv)
+            </button>
+
+            <button
+              onClick={gerarPdfGmax}
+              className="px-4 py-2.5 rounded-xl bg-slate-950 hover:bg-slate-900 text-white text-xs font-bold transition-all shadow-md cursor-pointer flex items-center gap-1.5"
+            >
+              📄 Gerar PDF p/ E-mail
+            </button>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={adicionarNovaLinha}
-            className="px-3.5 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border border-white/20"
-          >
-            ➕ Inserir Linha
-          </button>
-          <button
-            onClick={baixarArquivoExcelGmax}
-            className="px-4 py-2 rounded-xl bg-white text-[#107C41] hover:bg-emerald-50 text-xs font-black transition-all shadow-md cursor-pointer flex items-center gap-1.5"
-          >
-            📊 Baixar Excel (.csv)
-          </button>
-          <button
-            onClick={gerarPdfGmax}
-            className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all shadow-md cursor-pointer flex items-center gap-1.5"
-          >
-            📄 Gerar PDF p/ E-mail
-          </button>
+        {/* ABAS DE SEMANAS (ESTILO GUIA DO EXCEL NA PARTE INFERIOR) */}
+        <div className="pt-2 border-t border-white/20 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
+          <span className="text-[11px] font-bold uppercase text-white/70 whitespace-nowrap mr-1">
+            Semanas:
+          </span>
+          {semanasDisponiveis.map((sem) => (
+            <button
+              key={sem}
+              onClick={() => setSemanaAtiva(sem)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                semanaAtiva === sem
+                  ? 'bg-white text-[#107C41] shadow-md font-black'
+                  : 'bg-white/10 hover:bg-white/20 text-white/90 border border-white/15'
+              }`}
+            >
+              📑 {sem}
+            </button>
+          ))}
         </div>
       </div>
 
-      {mensagem && (
-        <div className="bg-emerald-100 border border-emerald-300 text-emerald-900 px-4 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between">
-          <span>{mensagem}</span>
-          <button onClick={() => setMensagem('')} className="underline text-[11px]">Fechar</button>
+      {mensagem.texto && (
+        <div
+          className={`px-4 py-3 rounded-xl text-xs font-bold flex items-center justify-between border ${
+            mensagem.tipo === 'success'
+              ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+              : 'bg-rose-100 text-rose-900 border-rose-300'
+          }`}
+        >
+          <span>{mensagem.texto}</span>
+          <button onClick={() => setMensagem({ tipo: '', texto: '' })} className="underline text-[11px]">
+            ✕
+          </button>
         </div>
       )}
 
-      {/* PAINEL DE KPIs EM TEMPO REAL */}
+      {/* TOTALIZADORES EM TEMPO REAL */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3">
-          <span className="text-[10px] font-bold text-slate-400 uppercase">Lançamentos</span>
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 shadow-2xs">
+          <span className="text-[10px] font-bold text-slate-400 uppercase">Notas na Semana</span>
           <p className="text-xl font-black text-slate-900 dark:text-white mt-0.5">{totais.preenchidas}</p>
         </div>
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3">
-          <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase">Coletas</span>
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 shadow-2xs">
+          <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase">Coletas (Luiz)</span>
           <p className="text-xl font-black text-blue-600 dark:text-blue-400 mt-0.5">{totais.coletas}</p>
         </div>
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3">
-          <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase">Transbordos</span>
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 shadow-2xs">
+          <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase">Transbordos GMAX</span>
           <p className="text-xl font-black text-purple-600 dark:text-purple-400 mt-0.5">{totais.transbordos}</p>
         </div>
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 shadow-2xs">
           <span className="text-[10px] font-bold text-slate-400 uppercase">Volumes (VOL)</span>
           <p className="text-xl font-black text-slate-900 dark:text-white mt-0.5">{totais.volumes}</p>
         </div>
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 shadow-2xs">
           <span className="text-[10px] font-bold text-slate-400 uppercase">Peso Total</span>
           <p className="text-xl font-black text-slate-900 dark:text-white mt-0.5">{totais.pesoTotal.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} KG</p>
         </div>
         <div className="bg-emerald-600 text-white rounded-xl p-3 shadow-md">
-          <span className="text-[10px] font-bold uppercase text-emerald-100">Total a Receber</span>
+          <span className="text-[10px] font-bold uppercase text-emerald-100">Total a Receber GMAX</span>
           <p className="text-xl font-black mt-0.5">R$ {totais.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
         </div>
       </div>
 
-      {/* GRADE EXATA DO EXCEL (DIGITAÇÃO DIRETA NAS CÉLULAS) */}
-      <div className="bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl shadow-lg overflow-hidden">
-        <div className="bg-slate-100 dark:bg-slate-800 border-b border-slate-300 dark:border-slate-700 px-4 py-2 flex items-center justify-between text-xs text-slate-600 dark:text-slate-300 font-semibold">
-          <div className="flex items-center gap-2">
+      {/* GRADE EXATA DO EXCEL */}
+      <div className="bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-2xl shadow-lg overflow-hidden">
+        <div className="bg-slate-100 dark:bg-slate-800 border-b border-slate-300 dark:border-slate-700 px-4 py-2.5 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300 font-bold">
             <span>🖱️</span>
-            <span>Preenchimento estilo Excel: clique e digite direto em qualquer célula. Ao apertar <strong>Enter</strong> ou <strong>Tab</strong>, o sistema salva automaticamente na nuvem.</span>
+            <span>Grade Semanal: digite direto nas células ou use <strong>📸 Tirar Foto da NF</strong> no celular para preencher rápido no barracão!</span>
           </div>
-          <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400">Total: R$ {totais.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+          <button
+            onClick={adicionarLinha}
+            className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-[11px] cursor-pointer"
+          >
+            + Inserir Linha
+          </button>
         </div>
 
         {loading ? (
-          <div className="p-16 text-center text-sm text-slate-500 animate-pulse">Carregando células da planilha...</div>
+          <div className="p-16 text-center text-sm text-slate-500 animate-pulse">Carregando planilha da semana...</div>
         ) : (
-          <div className="overflow-x-auto max-h-[72vh] overflow-y-auto">
+          <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
             <table className="w-full border-collapse text-xs select-none">
               <thead className="sticky top-0 z-20 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 shadow-xs">
                 <tr className="border-b border-slate-300 dark:border-slate-700 text-center font-bold uppercase text-[10px]">
@@ -534,7 +689,7 @@ export default function PlanilhaGmaxExcelPage() {
                       row.tipo === 'TRANSBORDO' ? 'bg-purple-50/25 dark:bg-purple-950/10' : ''
                     }`}
                   >
-                    {/* COLUNA #: NÚMERO DA LINHA (EDITÁVEL OU SEQ AUTOMÁTICA) */}
+                    {/* COLUNA #: SEQ */}
                     <td className="border-r border-slate-200 dark:border-slate-800 text-center font-mono font-bold text-slate-500 bg-slate-50 dark:bg-slate-800/40 p-0">
                       <input
                         type="text"
@@ -549,7 +704,7 @@ export default function PlanilhaGmaxExcelPage() {
                       />
                     </td>
 
-                    {/* TIPO DO SERVIÇO (COLETA / TRANSBORDO) */}
+                    {/* TIPO */}
                     <td className="border-r border-slate-200 dark:border-slate-800 p-0 text-center">
                       <select
                         value={row.tipo || 'COLETA'}
@@ -611,7 +766,7 @@ export default function PlanilhaGmaxExcelPage() {
                       />
                     </td>
 
-                    {/* UNIDADE VOLUME (VOL) */}
+                    {/* UNIDADE VOLUME */}
                     <td className="border-r border-slate-200 dark:border-slate-800 p-0 text-center font-mono text-[10px] text-slate-400 bg-slate-50 dark:bg-slate-800/30">
                       <input
                         type="text"
@@ -642,7 +797,7 @@ export default function PlanilhaGmaxExcelPage() {
                       />
                     </td>
 
-                    {/* UNIDADE PESO (KG) */}
+                    {/* UNIDADE PESO */}
                     <td className="border-r border-slate-200 dark:border-slate-800 p-0 text-center font-mono text-[10px] text-slate-400 bg-slate-50 dark:bg-slate-800/30">
                       <input
                         type="text"
@@ -657,7 +812,7 @@ export default function PlanilhaGmaxExcelPage() {
                       />
                     </td>
 
-                    {/* DATA DA COLETA */}
+                    {/* DATA */}
                     <td className="border-r border-slate-200 dark:border-slate-800 p-0 text-center">
                       <input
                         type="date"
@@ -672,7 +827,7 @@ export default function PlanilhaGmaxExcelPage() {
                       />
                     </td>
 
-                    {/* ORIGEM (CIDADE) */}
+                    {/* ORIGEM */}
                     <td className="border-r border-slate-200 dark:border-slate-800 p-0">
                       <input
                         type="text"
@@ -689,7 +844,7 @@ export default function PlanilhaGmaxExcelPage() {
                       />
                     </td>
 
-                    {/* COLETOR (LUIZ / GMAX) */}
+                    {/* COLETOR */}
                     <td className="border-r border-slate-200 dark:border-slate-800 p-0 text-center">
                       <input
                         type="text"
@@ -721,7 +876,7 @@ export default function PlanilhaGmaxExcelPage() {
                       />
                     </td>
 
-                    {/* VALOR (R$) */}
+                    {/* VALOR */}
                     <td className="border-r border-slate-200 dark:border-slate-800 p-0 text-right bg-emerald-50/40 dark:bg-emerald-950/20">
                       <input
                         type="text"
@@ -737,12 +892,12 @@ export default function PlanilhaGmaxExcelPage() {
                       />
                     </td>
 
-                    {/* BOTÃO LIMPAR / REMOVER LINHA */}
+                    {/* AÇÃO EXCLUIR */}
                     <td className="p-0 text-center">
                       {(row.empresa || row.nf || row.valor) ? (
                         <button
-                          onClick={() => limparOuExcluirLinha(idx)}
-                          title="Limpar linha"
+                          onClick={() => excluirLinha(idx)}
+                          title="Remover linha"
                           className="w-full h-full py-2 text-slate-300 hover:text-rose-600 transition-colors cursor-pointer text-xs"
                         >
                           ✕
@@ -757,7 +912,7 @@ export default function PlanilhaGmaxExcelPage() {
               <tfoot className="sticky bottom-0 z-20 bg-slate-900 text-white font-black text-xs shadow-lg">
                 <tr>
                   <td colSpan={4} className="py-3 px-4 uppercase text-amber-300">
-                    TOTAL GERAL ({totais.preenchidas} LANÇAMENTOS)
+                    TOTAL GERAL ({totais.preenchidas} NOTAS NA SEMANA)
                   </td>
                   <td className="py-3 px-1 text-center font-mono">{totais.volumes}</td>
                   <td className="py-3 px-1 text-center text-[10px] text-slate-400">VOL</td>
@@ -776,6 +931,192 @@ export default function PlanilhaGmaxExcelPage() {
           </div>
         )}
       </div>
+
+      {/* MODAL: CRIAR NOVA SEMANA */}
+      {showNovaSemanaModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
+              <span>📅</span> Criar Nova Semana de Coletas
+            </h3>
+            <p className="text-xs text-slate-500">
+              Ao virar a semana (ex: toda segunda-feira), crie a nova planilha para arquivar a anterior e começar os novos lançamentos.
+            </p>
+
+            <form onSubmit={handleCriarNovaSemana} className="space-y-4">
+              <div>
+                <label className="block text-[11px] font-extrabold uppercase text-slate-400 mb-1">
+                  Nome da Semana (Ex: COLETAS GMAX - SEMANA 26/10 A 30/10)
+                </label>
+                <input
+                  type="text"
+                  value={nomeNovaSemana}
+                  onChange={(e) => setNomeNovaSemana(e.target.value)}
+                  placeholder={getRotuloSemanaAtual()}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold uppercase"
+                  required
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowNovaSemanaModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-[#107C41] hover:bg-emerald-600 text-white text-xs font-black shadow-md"
+                >
+                  Criar Planilha
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: REVISÃO DE FOTO DA NF (OCR AUTOMÁTICO) */}
+      {showOcrModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-xl w-full shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+                <span>📸</span> Leitura Automática da Foto da NF
+              </h3>
+              <button
+                onClick={() => {
+                  setShowOcrModal(false);
+                  setOcrDadosExtraidos(null);
+                }}
+                className="text-xs text-slate-400 hover:text-white"
+              >
+                ✕ Fechar
+              </button>
+            </div>
+
+            {ocrLoading ? (
+              <div className="py-12 text-center space-y-4">
+                <div className="inline-block animate-spin text-3xl">🔄</div>
+                <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                  Lendo número da NF, empresa, peso e cidade de origem...
+                </p>
+                <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden max-w-xs mx-auto">
+                  <div
+                    className="bg-[#107C41] h-full transition-all duration-300"
+                    style={{ width: `${ocrProgress}%` }}
+                  />
+                </div>
+              </div>
+            ) : ocrDadosExtraidos ? (
+              <div className="space-y-4">
+                <p className="text-xs text-slate-500">
+                  Os dados foram identificados na foto da NF. Ajuste se necessário e confirme para inserir na planilha:
+                </p>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <label className="block text-[10px] font-extrabold uppercase text-slate-400 mb-1">
+                      Empresa (Emitente / Remetente)
+                    </label>
+                    <input
+                      type="text"
+                      value={ocrDadosExtraidos.empresa || ''}
+                      onChange={(e) => setOcrDadosExtraidos({ ...ocrDadosExtraidos, empresa: e.target.value.toUpperCase() })}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold uppercase"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase text-slate-400 mb-1">
+                      Nº da Nota Fiscal
+                    </label>
+                    <input
+                      type="text"
+                      value={ocrDadosExtraidos.nf || ''}
+                      onChange={(e) => setOcrDadosExtraidos({ ...ocrDadosExtraidos, nf: e.target.value })}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono font-bold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase text-slate-400 mb-1">
+                      Cidade de Origem (Coleta)
+                    </label>
+                    <input
+                      type="text"
+                      list="cidades-regiao-sugestoes"
+                      value={ocrDadosExtraidos.origem || 'PIRACICABA'}
+                      onChange={(e) => setOcrDadosExtraidos({ ...ocrDadosExtraidos, origem: e.target.value.toUpperCase() })}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold uppercase"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase text-slate-400 mb-1">
+                      Volumes
+                    </label>
+                    <input
+                      type="number"
+                      value={ocrDadosExtraidos.qtdVol || '1'}
+                      onChange={(e) => setOcrDadosExtraidos({ ...ocrDadosExtraidos, qtdVol: e.target.value })}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase text-slate-400 mb-1">
+                      Peso (KG)
+                    </label>
+                    <input
+                      type="text"
+                      value={ocrDadosExtraidos.peso || ''}
+                      onChange={(e) => setOcrDadosExtraidos({ ...ocrDadosExtraidos, peso: e.target.value })}
+                      placeholder="0.00"
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono font-bold"
+                    />
+                  </div>
+
+                  <div className="col-span-2">
+                    <label className="block text-[10px] font-extrabold uppercase text-slate-400 mb-1">
+                      Destino (Cliente Final)
+                    </label>
+                    <input
+                      type="text"
+                      value={ocrDadosExtraidos.destino || ''}
+                      onChange={(e) => setOcrDadosExtraidos({ ...ocrDadosExtraidos, destino: e.target.value.toUpperCase() })}
+                      placeholder="Ex: COOP. AGRICOLA, DA MATA..."
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold uppercase"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowOcrModal(false);
+                      setOcrDadosExtraidos(null);
+                    }}
+                    className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold"
+                  >
+                    Descartar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmarInserirOcrNaPlanilha}
+                    className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black shadow-lg shadow-emerald-600/30 cursor-pointer"
+                  >
+                    ✓ Inserir e Salvar na Planilha
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
