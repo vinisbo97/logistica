@@ -412,11 +412,13 @@ export default function AppColetaBarracaoPage() {
       {/* CABEÇALHO SIMPLES E DIRETO PARA O CELULAR */}
       <header className="bg-[#107C41] px-4 py-4 shadow-lg flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-2xl bg-white text-[#107C41] flex items-center justify-center font-black text-xl shadow-md">
-            PS
-          </div>
+          <img
+            src="/pslog-logo.svg"
+            alt="PsLog"
+            className="w-12 h-12 object-contain drop-shadow-md"
+          />
           <div>
-            <h1 className="text-base font-black leading-tight">APP DE COLETA — NF</h1>
+            <h1 className="text-lg font-black leading-tight tracking-tight">PsLog</h1>
             <p className="text-[11px] text-emerald-100 font-semibold">
               Fotografe a Nota Fiscal p/ gravar na Planilha
             </p>

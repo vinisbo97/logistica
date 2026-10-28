@@ -94,10 +94,12 @@ export default function RootLayout({ children }) {
   const fontHead = (
     <>
       <link rel="manifest" href="/manifest.json" />
+      <link rel="icon" href="/pslog-icon-192.png" type="image/png" />
+      <link rel="apple-touch-icon" href="/pslog-icon-192.png" />
       <meta name="theme-color" content="#107C41" />
       <meta name="apple-mobile-web-app-capable" content="yes" />
       <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-      <meta name="apple-mobile-web-app-title" content="Foto NF PSLog" />
+      <meta name="apple-mobile-web-app-title" content="PsLog" />
       <link rel="preconnect" href="https://fonts.googleapis.com" />
       <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       <link
@@ -142,7 +144,7 @@ export default function RootLayout({ children }) {
     return (
       <html lang="pt-BR" data-theme="dark">
         <head>
-          <title>App de Coleta NF | PS Logística</title>
+          <title>PsLog</title>
           {fontHead}
         </head>
         <body className="bg-[#060B18] text-white min-h-screen font-sans">
