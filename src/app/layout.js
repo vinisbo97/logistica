@@ -30,7 +30,12 @@ export default function RootLayout({ children }) {
 
         if (session) {
           setIsAuthenticated(true);
+          const mail = (session.user?.email || 'Administrador').toLowerCase();
           setUserEmail(session.user?.email || 'Administrador');
+          // Se for o usuário exclusivo do sogro (coleta@pslog.com), mantém apenas no aplicativo /app-coleta
+          if (mail === 'coleta@pslog.com' && pathname !== '/app-coleta' && pathname !== '/' && pathname !== '/login') {
+            router.push('/app-coleta');
+          }
         } else {
           setIsAuthenticated(false);
           // Somente páginas internas do ERP redirecionam para /login
@@ -74,6 +79,7 @@ export default function RootLayout({ children }) {
   const navItems = [
     { href: '/dashboard', label: 'Painel Executivo', icon: '📊', group: 'Visão Geral' },
     { href: '/coletas-gmax', label: 'Planilha Coletas GMAX', icon: '📑', group: 'Operação TMS' },
+    { href: '/app-coleta', label: 'App Celular (Foto NF)', icon: '📲', group: 'Operação TMS' },
     { href: '/cotacoes', label: 'Cotações & Fretes', icon: '📋', group: 'Operação TMS' },
     { href: '/entregas', label: 'Torre de Entregas', icon: '🚚', group: 'Operação TMS' },
     { href: '/clientes', label: 'Clientes & Embarcadores', icon: '🏢', group: 'Cadastros' },
@@ -87,6 +93,11 @@ export default function RootLayout({ children }) {
 
   const fontHead = (
     <>
+      <link rel="manifest" href="/manifest.json" />
+      <meta name="theme-color" content="#107C41" />
+      <meta name="apple-mobile-web-app-capable" content="yes" />
+      <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+      <meta name="apple-mobile-web-app-title" content="Foto NF PSLog" />
       <link rel="preconnect" href="https://fonts.googleapis.com" />
       <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       <link
@@ -117,6 +128,21 @@ export default function RootLayout({ children }) {
       <html lang="pt-BR" data-theme={theme}>
         <head>
           <title>Acesso ao Portal ERP | PS Logística</title>
+          {fontHead}
+        </head>
+        <body className="bg-[#060B18] text-white min-h-screen font-sans">
+          {children}
+        </body>
+      </html>
+    );
+  }
+
+  // 2.5 APLICATIVO MOBILE DE COLETA DE NF (/app-coleta) — TELA CHEIA LIMPA NO CELULAR SEM MENUS COMPLEXOS
+  if (pathname === '/app-coleta') {
+    return (
+      <html lang="pt-BR" data-theme="dark">
+        <head>
+          <title>App de Coleta NF | PS Logística</title>
           {fontHead}
         </head>
         <body className="bg-[#060B18] text-white min-h-screen font-sans">

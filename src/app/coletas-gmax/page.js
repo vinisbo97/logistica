@@ -833,6 +833,7 @@ export default function PlanilhaGmaxPage() {
                   <th className="w-24 border-r border-slate-300 dark:border-slate-700 py-2.5 px-2">COLETOR</th>
                   <th className="w-40 border-r border-slate-300 dark:border-slate-700 py-2.5 px-2 text-left">DESTINO</th>
                   <th className="w-28 border-r border-slate-300 dark:border-slate-700 py-2.5 px-2 text-right bg-emerald-100/50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300">VALOR (R$)</th>
+                  <th className="w-16 border-r border-slate-300 dark:border-slate-700 py-2.5 px-2 text-center">FOTO NF</th>
                   <th className="w-12 py-2.5 px-2"></th>
                 </tr>
               </thead>
@@ -1034,6 +1035,20 @@ export default function PlanilhaGmaxPage() {
                       />
                     </td>
 
+                    <td className="border-r border-slate-200 dark:border-slate-800 p-0 text-center">
+                      {(row.foto_url || row.foto_base64) ? (
+                        <button
+                          onClick={() => window.open(row.foto_url || row.foto_base64, '_blank')}
+                          title="Ver foto da NF tirada no barracão (salva por 15 dias)"
+                          className="px-2 py-1 rounded bg-amber-400/20 text-amber-600 dark:text-amber-300 font-bold text-[10px] hover:bg-amber-400/40 cursor-pointer"
+                        >
+                          📸 Ver
+                        </button>
+                      ) : (
+                        <span className="text-slate-300 dark:text-slate-700 text-[10px]">—</span>
+                      )}
+                    </td>
+
                     <td className="p-0 text-center">
                       {(row.empresa || row.nf || row.valor) ? (
                         <button
@@ -1065,6 +1080,7 @@ export default function PlanilhaGmaxPage() {
                   <td className="py-3 px-2 text-right font-mono text-emerald-400 text-sm bg-slate-950">
                     R$ {totais.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </td>
+                  <td></td>
                   <td></td>
                 </tr>
               </tfoot>

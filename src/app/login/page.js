@@ -28,18 +28,28 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data: authData, error } = await supabase.auth.signInWithPassword({
         email,
         password
       });
 
       if (error) throw error;
 
-      showMessage('success', 'Autenticação confirmada! Acessando o Painel ERP...');
+      const emailLogado = (authData?.user?.email || email).toLowerCase().trim();
+      const isOperadorFoto =
+        emailLogado === 'coleta@pslog.com' ||
+        authData?.user?.user_metadata?.role === 'coletor_foto';
+
+      showMessage(
+        'success',
+        isOperadorFoto
+          ? 'Acesso liberado! Abrindo Aplicativo de Foto da Nota Fiscal...'
+          : 'Autenticação confirmada! Acessando o Painel ERP...'
+      );
       setTimeout(() => {
-        router.push('/dashboard');
+        router.push(isOperadorFoto ? '/app-coleta' : '/dashboard');
         router.refresh();
-      }, 700);
+      }, 600);
     } catch (error) {
       showMessage('error', 'Credenciais inválidas. Verifique seu e-mail e senha.');
       console.error(error);

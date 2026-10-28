@@ -1,0 +1,22 @@
+{
+  "name": "PS Logística — App de Coleta NF",
+  "short_name": "Foto NF PSLog",
+  "description": "Aplicativo rápido para fotografar Notas Fiscais no barracão e salvar direto na planilha GMAX",
+  "start_url": "/app-coleta",
+  "display": "standalone",
+  "background_color": "#060B18",
+  "theme_color": "#107C41",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/fiat-strada.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/fiat-strada.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
