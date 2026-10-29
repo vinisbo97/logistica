@@ -110,12 +110,14 @@ export default function AppColetaBarracaoPage() {
     origem: 'PIRACICABA',
     destino: '',
     tipo: 'COLETA',
-    coletor: 'LUIZ'
+    coletor: 'LUIZ',
+    valor: '50'
   });
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const cameraNativaInputRef = useRef(null);
+  const galeriaCelularInputRef = useRef(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -286,15 +288,19 @@ export default function AppColetaBarracaoPage() {
       setProgressoOcr(95);
 
       const lido = parseDanfeText(ret.data.text);
+      const origLida = (lido.origem || 'PIRACICABA').toUpperCase();
+      const valorSugerido = VALORES_PADRAO[origLida] !== undefined ? String(VALORES_PADRAO[origLida]) : '50';
+
       setDadosNf({
         empresa: lido.empresa || '',
         nf: lido.nf || '',
         qtd_vol: lido.qtdVol || '1',
         peso: lido.peso || '',
-        origem: lido.origem || 'PIRACICABA',
+        origem: origLida,
         destino: lido.destino || '',
         tipo: 'COLETA',
-        coletor: 'LUIZ'
+        coletor: 'LUIZ',
+        valor: valorSugerido
       });
     } catch (err) {
       console.error('Erro OCR:', err);
@@ -306,7 +312,8 @@ export default function AppColetaBarracaoPage() {
         origem: 'PIRACICABA',
         destino: '',
         tipo: 'COLETA',
-        coletor: 'LUIZ'
+        coletor: 'LUIZ',
+        valor: '50'
       });
     } finally {
       setProgressoOcr(100);
@@ -336,7 +343,11 @@ export default function AppColetaBarracaoPage() {
       }
 
       const valorCalculado =
-        dadosNf.tipo === 'TRANSBORDO' ? 0 : VALORES_PADRAO[dadosNf.origem.toUpperCase()] || 50;
+        dadosNf.valor !== undefined && dadosNf.valor !== ''
+          ? parseFloat(String(dadosNf.valor).replace(',', '.')) || 0
+          : dadosNf.tipo === 'TRANSBORDO'
+          ? 0
+          : VALORES_PADRAO[dadosNf.origem.toUpperCase()] || 50;
 
       const registroPlanilha = {
         semana_nome: semanaAtual,
@@ -393,12 +404,21 @@ export default function AppColetaBarracaoPage() {
 
   return (
     <div className="min-h-screen bg-[#060B18] text-white flex flex-col justify-between pb-8 select-none">
-      {/* INPUT CÂMERA TRASEIRA NATIVA DO CELULAR */}
+      {/* 1. INPUT CÂMERA TRASEIRA NATIVA DO CELULAR */}
       <input
         type="file"
         accept="image/*"
         capture="environment"
         ref={cameraNativaInputRef}
+        onChange={handleFotoNativaCelular}
+        className="hidden"
+      />
+
+      {/* 2. INPUT PARA ANEXAR FOTO DA GALERIA DO CELULAR */}
+      <input
+        type="file"
+        accept="image/*"
+        ref={galeriaCelularInputRef}
         onChange={handleFotoNativaCelular}
         className="hidden"
       />
@@ -459,20 +479,28 @@ export default function AppColetaBarracaoPage() {
                 </p>
               </div>
 
-              {/* BOTÃO PRINCIPAL: ABRE A CÂMERA TRASEIRA NATIVA DO CELULAR (MAIS FÁCIL E COM FOCO AUTOMÁTICO) */}
+              {/* BOTÃO 1: ABRE A CÂMERA TRASEIRA NATIVA DO CELULAR */}
               <button
                 onClick={() => cameraNativaInputRef.current?.click()}
-                className="w-full py-6 rounded-2xl bg-amber-400 hover:bg-amber-300 active:scale-98 text-slate-950 font-black text-xl shadow-xl shadow-amber-400/25 flex items-center justify-center gap-3 cursor-pointer transition-all"
+                className="w-full py-5 rounded-2xl bg-amber-400 hover:bg-amber-300 active:scale-98 text-slate-950 font-black text-xl shadow-xl shadow-amber-400/25 flex items-center justify-center gap-3 cursor-pointer transition-all"
               >
                 <span className="text-3xl">📷</span> TIRAR FOTO DA NOTA
               </button>
 
-              {/* OPÇÃO SECUNDÁRIA: CÂMERA DENTRO DA TELA */}
+              {/* BOTÃO 2: ESCOLHER FOTO JÁ TIRADA NA GALERIA DO CELULAR */}
+              <button
+                onClick={() => galeriaCelularInputRef.current?.click()}
+                className="w-full py-4.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-98 text-white font-black text-base shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2.5 cursor-pointer transition-all"
+              >
+                <span className="text-2xl">🖼️</span> ANEXAR FOTO DA GALERIA
+              </button>
+
+              {/* OPÇÃO 3: VISOR DE CÂMERA DENTRO DA TELA */}
               <button
                 onClick={abrirCameraTraseira}
-                className="w-full py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs border border-slate-700 cursor-pointer"
+                className="w-full py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs border border-slate-700 cursor-pointer"
               >
-                Abrir visor de câmera dentro da tela
+                Abrir visor de câmera ao vivo dentro da tela
               </button>
             </div>
 
@@ -667,7 +695,15 @@ export default function AppColetaBarracaoPage() {
                     type="text"
                     list="cidades-app-coleta"
                     value={dadosNf.origem}
-                    onChange={(e) => setDadosNf({ ...dadosNf, origem: e.target.value.toUpperCase() })}
+                    onChange={(e) => {
+                      const novaCid = e.target.value.toUpperCase();
+                      const valPadrao = VALORES_PADRAO[novaCid];
+                      setDadosNf({
+                        ...dadosNf,
+                        origem: novaCid,
+                        valor: valPadrao !== undefined ? String(valPadrao) : dadosNf.valor
+                      });
+                    }}
                     className="w-full bg-slate-800 border-2 border-slate-700 focus:border-amber-400 rounded-2xl px-4 py-3.5 text-sm font-black text-white uppercase focus:outline-none"
                   />
                 </div>
@@ -700,17 +736,33 @@ export default function AppColetaBarracaoPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-extrabold uppercase text-slate-300 mb-1">
-                  Destino (Cliente Final)
-                </label>
-                <input
-                  type="text"
-                  value={dadosNf.destino}
-                  onChange={(e) => setDadosNf({ ...dadosNf, destino: e.target.value.toUpperCase() })}
-                  placeholder="Ex: COOP. AGRICOLA, DA MATA..."
-                  className="w-full bg-slate-800 border-2 border-slate-700 focus:border-amber-400 rounded-2xl px-4 py-3 text-base font-black text-white uppercase focus:outline-none"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-extrabold uppercase text-slate-300 mb-1">
+                    Destino (Cliente Final)
+                  </label>
+                  <input
+                    type="text"
+                    value={dadosNf.destino}
+                    onChange={(e) => setDadosNf({ ...dadosNf, destino: e.target.value.toUpperCase() })}
+                    placeholder="Ex: COOP. AGRICOLA, DA MATA..."
+                    className="w-full bg-slate-800 border-2 border-slate-700 focus:border-amber-400 rounded-2xl px-4 py-3 text-base font-black text-white uppercase focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-extrabold uppercase text-emerald-400 mb-1">
+                    Valor do Frete (R$)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={dadosNf.valor !== undefined ? dadosNf.valor : '50'}
+                    onChange={(e) => setDadosNf({ ...dadosNf, valor: e.target.value })}
+                    placeholder="Ex: 50, 110 ou 0"
+                    className="w-full bg-emerald-950/60 border-2 border-emerald-500 focus:border-amber-400 rounded-2xl px-4 py-3 text-base font-mono font-black text-emerald-300 focus:outline-none"
+                  />
+                </div>
               </div>
             </div>
 

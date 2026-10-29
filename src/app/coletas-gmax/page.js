@@ -426,9 +426,12 @@ export default function PlanilhaGmaxPage() {
 
       const textoLido = ret.data.text;
       const extraido = parseDanfeText(textoLido);
+      const cidOrig = (extraido.origem || 'PIRACICABA').toUpperCase();
 
       setOcrDadosExtraidos({
         ...extraido,
+        origem: cidOrig,
+        valor: VALORES_PADRAO[cidOrig] !== undefined ? String(VALORES_PADRAO[cidOrig]) : '50',
         textoCompleto: textoLido
       });
       notificar('success', 'Foto lida com sucesso! Confira e confirme.');
@@ -441,7 +444,8 @@ export default function PlanilhaGmaxPage() {
         origem: 'PIRACICABA',
         destino: '',
         peso: '',
-        qtdVol: '1'
+        qtdVol: '1',
+        valor: '50'
       });
     } finally {
       setOcrLoading(false);
@@ -459,8 +463,11 @@ export default function PlanilhaGmaxPage() {
 
     setTimeout(() => {
       const extraido = parseDanfeText(simulacao.texto);
+      const cidOrig = (extraido.origem || 'PIRACICABA').toUpperCase();
       setOcrDadosExtraidos({
         ...extraido,
+        origem: cidOrig,
+        valor: VALORES_PADRAO[cidOrig] !== undefined ? String(VALORES_PADRAO[cidOrig]) : '50',
         textoCompleto: simulacao.texto
       });
       setOcrLoading(false);
@@ -474,6 +481,11 @@ export default function PlanilhaGmaxPage() {
 
     let idxVazia = linhas.findIndex((l) => !l.empresa && !l.nf);
     const novasLinhas = [...linhas];
+
+    const valorFinal =
+      ocrDadosExtraidos.valor !== undefined && ocrDadosExtraidos.valor !== ''
+        ? parseFloat(String(ocrDadosExtraidos.valor).replace(',', '.')) || 0
+        : VALORES_PADRAO[ocrDadosExtraidos.origem] || 50;
 
     const novaLinha = {
       dbId: null,
@@ -490,7 +502,7 @@ export default function PlanilhaGmaxPage() {
       origem: ocrDadosExtraidos.origem || 'PIRACICABA',
       coletor: 'LUIZ',
       destino: ocrDadosExtraidos.destino || '',
-      valor: VALORES_PADRAO[ocrDadosExtraidos.origem] || 50
+      valor: valorFinal
     };
 
     if (idxVazia !== -1) {
@@ -1247,7 +1259,15 @@ export default function PlanilhaGmaxPage() {
                       type="text"
                       list="cidades-regiao-sugestoes"
                       value={ocrDadosExtraidos.origem || 'PIRACICABA'}
-                      onChange={(e) => setOcrDadosExtraidos({ ...ocrDadosExtraidos, origem: e.target.value.toUpperCase() })}
+                      onChange={(e) => {
+                        const novaCid = e.target.value.toUpperCase();
+                        const valPadrao = VALORES_PADRAO[novaCid];
+                        setOcrDadosExtraidos({
+                          ...ocrDadosExtraidos,
+                          origem: novaCid,
+                          valor: valPadrao !== undefined ? String(valPadrao) : ocrDadosExtraidos.valor
+                        });
+                      }}
                       className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold uppercase"
                     />
                   </div>
@@ -1277,7 +1297,7 @@ export default function PlanilhaGmaxPage() {
                     />
                   </div>
 
-                  <div className="col-span-2">
+                  <div>
                     <label className="block text-[10px] font-extrabold uppercase text-slate-400 mb-1">
                       Destino (Cliente Final)
                     </label>
@@ -1287,6 +1307,20 @@ export default function PlanilhaGmaxPage() {
                       onChange={(e) => setOcrDadosExtraidos({ ...ocrDadosExtraidos, destino: e.target.value.toUpperCase() })}
                       placeholder="Ex: COOP. AGRICOLA, DA MATA..."
                       className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold uppercase"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase text-emerald-600 dark:text-emerald-400 mb-1">
+                      Valor do Frete (R$)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={ocrDadosExtraidos.valor !== undefined ? ocrDadosExtraidos.valor : '50'}
+                      onChange={(e) => setOcrDadosExtraidos({ ...ocrDadosExtraidos, valor: e.target.value })}
+                      placeholder="50"
+                      className="w-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-400 dark:border-emerald-700 rounded-xl px-3 py-2 text-xs font-mono font-black text-emerald-700 dark:text-emerald-300"
                     />
                   </div>
                 </div>
