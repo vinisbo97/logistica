@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { parseDanfeText } from '@/lib/nfeParser';
+import { parseDanfeText, lerImagemDanfeOcr } from '@/lib/nfeParser';
 
 const CIDADES_REGIAO = [
   'PIRACICABA',
@@ -414,18 +414,7 @@ export default function PlanilhaGmaxPage() {
     setOcrProgress(15);
 
     try {
-      const { createWorker } = await import('tesseract.js');
-      setOcrProgress(35);
-
-      const worker = await createWorker('por');
-      setOcrProgress(65);
-
-      const ret = await worker.recognize(fileOrBlob);
-      await worker.terminate();
-      setOcrProgress(90);
-
-      const textoLido = ret.data.text;
-      const extraido = parseDanfeText(textoLido);
+      const { texto: textoLido, dados: extraido } = await lerImagemDanfeOcr(fileOrBlob, setOcrProgress);
       const cidOrig = (extraido.origem || 'PIRACICABA').toUpperCase();
 
       setOcrDadosExtraidos({

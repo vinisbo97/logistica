@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { parseDanfeText } from '@/lib/nfeParser';
+import { parseDanfeText, lerImagemDanfeOcr } from '@/lib/nfeParser';
 
 const CIDADES_REGIAO = [
   'PIRACICABA',
@@ -307,18 +307,10 @@ export default function AppColetaBarracaoPage() {
     setFotoBlob(blob);
     setFotoBase64(base64);
     setFotoPreview(base64);
-    setProgressoOcr(35);
 
     try {
-      const { createWorker } = await import('tesseract.js');
-      const worker = await createWorker('por');
-      setProgressoOcr(65);
-
-      const ret = await worker.recognize(blob);
-      await worker.terminate();
-      setProgressoOcr(95);
-
-      const lido = parseDanfeText(ret.data.text);
+      // Usa a imagem original em alta resolução com remoção de linhas de grade da DANFE + Upscale 3x + PSM 6
+      const { dados: lido } = await lerImagemDanfeOcr(fileOrBlob, setProgressoOcr);
       const origLida = (lido.origem || 'PIRACICABA').toUpperCase();
       const valorSugerido = VALORES_PADRAO[origLida] !== undefined ? String(VALORES_PADRAO[origLida]) : '50';
 
@@ -555,6 +547,11 @@ export default function AppColetaBarracaoPage() {
 
               <div className="grid grid-cols-1 gap-2.5">
                 {[
+                  {
+                    titulo: 'NF-e 25.577 — DANFE Padrão SEFAZ (Americana)',
+                    sub: '1 VOL • Peso Bruto: 2,500 KG • Grade Completa SEFAZ',
+                    img: '/danfe-real-homologacao.jpg'
+                  },
                   {
                     titulo: 'NF-e 152.890 — TRATORCOM (Piracicaba)',
                     sub: '3 VOL • 85.50 KG • Destino: COOP. AGRICOLA • R$ 50',
