@@ -323,7 +323,8 @@ export default function AppColetaBarracaoPage() {
         destino: lido.destino || '',
         tipo: 'COLETA',
         coletor: 'LUIZ',
-        valor: valorSugerido
+        valor: valorSugerido,
+        explicacaoIa: lido.explicacaoIa || ''
       });
     } catch (err) {
       console.error('Erro OCR:', err);
@@ -759,6 +760,12 @@ export default function AppColetaBarracaoPage() {
                 />
               )}
             </div>
+
+            {dadosNf.explicacaoIa && (
+              <div className="bg-emerald-950/60 border border-emerald-500/40 rounded-2xl p-3 text-[11px] text-emerald-200 font-semibold leading-relaxed">
+                🤖 <strong>Agente de IA:</strong> {dadosNf.explicacaoIa}
+              </div>
+            )}
 
             <div className="space-y-3">
               <div>

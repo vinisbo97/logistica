@@ -1211,8 +1211,15 @@ export default function PlanilhaGmaxPage() {
             {/* SEÇÃO 3: RESULTADOS IDENTIFICADOS */}
             {!cameraAtiva && !ocrLoading && ocrDadosExtraidos && (
               <div className="space-y-4">
-                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 rounded-xl text-xs text-emerald-800 dark:text-emerald-200 font-bold flex items-center gap-2">
-                  <span>✅</span> Dados identificados com sucesso! Confira e clique em confirmar:
+                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 rounded-xl text-xs text-emerald-800 dark:text-emerald-200 font-bold space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span>🤖</span> Dados interpretados pelo Agente de IA! Confira e clique em confirmar:
+                  </div>
+                  {ocrDadosExtraidos.explicacaoIa && (
+                    <p className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300 pl-5">
+                      {ocrDadosExtraidos.explicacaoIa}
+                    </p>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">

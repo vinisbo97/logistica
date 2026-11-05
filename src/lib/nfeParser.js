@@ -1,13 +1,13 @@
 /**
  * Pré-processa a imagem de uma DANFE real no navegador (Canvas):
- * 1. Remove linhas horizontais e verticais longas das grades/tabelas do padrão SEFAZ
+ * 1. Suporta rotação automática (0°, 90°, 270°) para notas em Paisagem / fotografadas de lado.
+ * 2. Remove linhas horizontais e verticais longas das grades/tabelas do padrão SEFAZ
  *    (que ficam coladas a 1px dos números de Peso Bruto, Volumes e NF e atrapalham o Tesseract).
- * 2. Amplia (Upscale) a imagem para ~2400px de largura com interpolação de alta qualidade
- *    para que fontes pequenas de 8px fiquem nítidas (~24px).
+ * 3. Amplia (Upscale) a imagem para ~2400px de largura com interpolação de alta qualidade.
  */
-export async function preprocessarImagemDanfe(fileOrBlob) {
+export async function preprocessarImagemDanfe(fileOrBlob, rotationDeg = 0) {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
-    return fileOrBlob;
+    return { blob: fileOrBlob, orientacao: 'Retrato' };
   }
 
   return new Promise((resolve) => {
@@ -17,11 +17,22 @@ export async function preprocessarImagemDanfe(fileOrBlob) {
     img.onload = () => {
       try {
         URL.revokeObjectURL(url);
-        const origW = img.width || 800;
-        const origH = img.height || 1000;
+        const rawW = img.width || 800;
+        const rawH = img.height || 1000;
+
+        const isRotated90 = rotationDeg === 90 || rotationDeg === 270;
+        const origW = isRotated90 ? rawH : rawW;
+        const origH = isRotated90 ? rawW : rawH;
+
+        const orientacao =
+          rotationDeg !== 0
+            ? `Paisagem Rotacionada (${rotationDeg}°)`
+            : origW > origH * 1.12
+            ? 'Modelo Paisagem (Horizontal)'
+            : 'Modelo Retrato (Vertical)';
 
         // 1. Canvas base em resolução natural (limitado a 1200px para limpeza rápida de grade)
-        const baseScale = origW > 1200 ? 1200 / origW : 1;
+        const baseScale = Math.max(origW, origH) > 1200 ? 1200 / Math.max(origW, origH) : 1;
         const w = Math.max(1, Math.round(origW * baseScale));
         const h = Math.max(1, Math.round(origH * baseScale));
 
@@ -29,7 +40,20 @@ export async function preprocessarImagemDanfe(fileOrBlob) {
         baseCanvas.width = w;
         baseCanvas.height = h;
         const baseCtx = baseCanvas.getContext('2d', { willReadFrequently: true });
-        baseCtx.drawImage(img, 0, 0, w, h);
+
+        baseCtx.save();
+        if (rotationDeg === 90) {
+          baseCtx.translate(w, 0);
+          baseCtx.rotate(Math.PI / 2);
+          baseCtx.drawImage(img, 0, 0, h, w);
+        } else if (rotationDeg === 270) {
+          baseCtx.translate(0, h);
+          baseCtx.rotate(-Math.PI / 2);
+          baseCtx.drawImage(img, 0, 0, h, w);
+        } else {
+          baseCtx.drawImage(img, 0, 0, w, h);
+        }
+        baseCtx.restore();
 
         const imgData = baseCtx.getImageData(0, 0, w, h);
         const src = imgData.data;
@@ -70,11 +94,11 @@ export async function preprocessarImagemDanfe(fileOrBlob) {
         }
 
         // Remove linhas verticais longas (divisórias de células da DANFE),
-        // preservando a região do código de barras no canto superior direito (x > 45% e y < 12%)
+        // preservando a região do código de barras no canto superior direito
         for (let x = 0; x < w; x++) {
           let runStart = -1;
           for (let y = 0; y < h; y++) {
-            const isBarcodeZone = x > w * 0.45 && y < h * 0.12;
+            const isBarcodeZone = x > w * 0.4 && y < h * 0.15;
             const idx = (y * w + x) * 4;
             const lum = (src[idx] + src[idx + 1] + src[idx + 2]) / 3;
             if (!isBarcodeZone && lum < 200) {
@@ -122,48 +146,125 @@ export async function preprocessarImagemDanfe(fileOrBlob) {
 
         upCanvas.toBlob(
           (cleanBlob) => {
-            resolve(cleanBlob || fileOrBlob);
+            resolve({ blob: cleanBlob || fileOrBlob, orientacao });
           },
           'image/png'
         );
       } catch (e) {
         console.warn('Falha no pré-processamento da DANFE, usando imagem original:', e);
-        resolve(fileOrBlob);
+        resolve({ blob: fileOrBlob, orientacao: 'Padrão' });
       }
     };
 
     img.onerror = () => {
       URL.revokeObjectURL(url);
-      resolve(fileOrBlob);
+      resolve({ blob: fileOrBlob, orientacao: 'Padrão' });
     };
 
     img.src = url;
   });
 }
 
+function calcularScoreTextoDanfe(texto) {
+  if (!texto) return 0;
+  const u = texto.toUpperCase();
+  let score = 0;
+  const chaves = [
+    'DANFE',
+    'NOTA FISCAL',
+    'EMITENTE',
+    'DESTINAT',
+    'PESO',
+    'QUANTIDADE',
+    'VALOR',
+    'CHAVE',
+    'CNPJ',
+    'TRANSPORTADOR',
+    'NATUREZA'
+  ];
+  for (const k of chaves) {
+    if (u.includes(k)) score++;
+  }
+  if (/\d{2}\.\d{3}\.\d{3}\/\d{4}\-\d{2}/.test(u)) score += 2;
+  return score;
+}
+
 /**
- * Executa o OCR completo em uma imagem de DANFE usando pré-processamento + modo de bloco/tabela (PSM 6)
+ * Executa o OCR completo em uma imagem de DANFE (suportando Retrato, Paisagem e Rotação 90°)
+ * e aciona o Agente de Inteligência Artificial (/api/ia-ler-nfe) + Consulta Receita Federal.
  */
 export async function lerImagemDanfeOcr(fileOrBlob, onProgress) {
-  if (onProgress) onProgress(25);
-  const imagemLimpa = await preprocessarImagemDanfe(fileOrBlob);
-  if (onProgress) onProgress(45);
+  if (onProgress) onProgress(15);
+  let { blob: imagemLimpa, orientacao } = await preprocessarImagemDanfe(fileOrBlob, 0);
+  if (onProgress) onProgress(35);
 
   const { createWorker } = await import('tesseract.js');
   const worker = await createWorker('por');
   await worker.setParameters({
     tessedit_pageseg_mode: '6'
   });
-  if (onProgress) onProgress(70);
+  if (onProgress) onProgress(55);
 
-  const ret = await worker.recognize(imagemLimpa);
+  let ret = await worker.recognize(imagemLimpa);
+  let texto = ret?.data?.text || '';
+
+  // Se a nota fiscal foi fotografada de lado (ex: nota em Paisagem tirada com celular em pé),
+  // o score de palavras da DANFE será baixo. Giramos 90° automaticamente e lemos novamente!
+  if (calcularScoreTextoDanfe(texto) < 2) {
+    if (onProgress) onProgress(65);
+    const rot90 = await preprocessarImagemDanfe(fileOrBlob, 90);
+    const ret90 = await worker.recognize(rot90.blob);
+    const texto90 = ret90?.data?.text || '';
+    if (calcularScoreTextoDanfe(texto90) > calcularScoreTextoDanfe(texto)) {
+      texto = texto90;
+      orientacao = rot90.orientacao;
+    }
+  }
+
   await worker.terminate();
-  if (onProgress) onProgress(95);
+  if (onProgress) onProgress(78);
 
-  const texto = ret?.data?.text || '';
+  const preExtraido = parseDanfeText(texto);
+
+  // Aciona o Agente de IA Logístico + Cruzamento CNPJ Receita Federal no Backend
+  if (typeof window !== 'undefined') {
+    try {
+      const iaRes = await fetch('/api/ia-ler-nfe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          textoOcrLocal: texto,
+          preExtraido,
+          orientacaoDetectada: orientacao
+        })
+      });
+
+      if (iaRes.ok) {
+        const iaJson = await iaRes.json();
+        if (iaJson?.ok && iaJson?.dados) {
+          if (onProgress) onProgress(98);
+          return {
+            texto,
+            dados: {
+              ...preExtraido,
+              ...iaJson.dados,
+              provedorIa: iaJson.provedor || 'Agente IA Logístico'
+            }
+          };
+        }
+      }
+    } catch (e) {
+      console.warn('Agente IA offline, usando parser estrutural local:', e);
+    }
+  }
+
+  if (onProgress) onProgress(98);
   return {
     texto,
-    dados: parseDanfeText(texto)
+    dados: {
+      ...preExtraido,
+      explicacaoIa: `Leitura estrutural concluída (${orientacao})`
+    }
   };
 }
 
@@ -193,7 +294,7 @@ export function parseDanfeText(text) {
   let qtdVol = '1';
   let chaveAcesso = '';
 
-  // 1. Chave de acesso da NFe de 44 dígitos (visível no código de barras ou topo)
+  // 1. Chave de acesso da NFe de 44 dígitos (visível no código de barras ou topo/lateral)
   const chaveMatch = text.replace(/[\s\.\-]/g, '').match(/\d{44}/);
   if (chaveMatch) {
     chaveAcesso = chaveMatch[0];
@@ -261,22 +362,24 @@ export function parseDanfeText(text) {
     }
   }
 
-  // 4. PESO BRUTO / LÍQUIDO e QUANTIDADE DE VOLUMES (Suporta layout real SEFAZ multi-linha e linha única)
-  // 4A. Tenta primeiro na mesma linha (ex: "PESO BRUTO (KG): 480,00")
+  // 4. PESO BRUTO / LÍQUIDO e QUANTIDADE DE VOLUMES
+  // Suporta:
+  // - Layout Retrato ou Paisagem padrão SEFAZ (título na linha i, valores na linha i+1);
+  // - Dados Adicionais / Informações Complementares (no topo ou no rodapé da nota);
+  // - Linha única ("PESO BRUTO: 2,500").
   const pesoSameLine = text.match(
-    /(?:PESO\s+BRUTO(?:\s*\([^\)]*\))?|PESO\s+L[ÍI]QUIDO(?:\s*\([^\)]*\))?)\s*[:\.]?\s*(\d{1,3}(?:\.\d{3})*[,\.]\d+|\d+[,\.]\d+)/i
+    /(?:PESO\s+BRUTO(?:\s*\([^\)]*\))?|PESO\s+L[ÍI]QUIDO(?:\s*\([^\)]*\))?|PESO\s+TOTAL)\s*[:\.\-]?\s*(\d{1,3}(?:\.\d{3})*[,\.]\d+|\d+[,\.]\d+)/i
   );
   if (pesoSameLine && pesoSameLine[1]) {
     peso = normalizarPesoExtraido(pesoSameLine[1]);
   }
 
-  const volSameLine = text.match(/(?:QUANTIDADE(?:\s+DE\s+VOLUMES)?|QTD\s+VOL(?:UMES)?|VOLUMES?)\s*[:\.]?\s*(\d{1,5})\b/i);
+  const volSameLine = text.match(/(?:QUANTIDADE(?:\s+DE\s+VOLUMES)?|QTD\.?\s*VOL(?:UMES)?|VOLUMES?)\s*[:\.\-]?\s*(\d{1,5})\b/i);
   if (volSameLine && volSameLine[1]) {
     qtdVol = volSameLine[1];
   }
 
-  // 4B. Layout oficial SEFAZ: Cabeçalho "QUANTIDADE | ESPÉCIE | MARCA | NUMERAÇÃO | PESO BRUTO (Kg) | PESO LÍQUIDO (Kg)"
-  // em uma linha e os valores (ex: "1   2,500   2,500" ou "10 CAIXAS   145,800   140,000") na linha de baixo!
+  // 4B. Layout oficial SEFAZ (Retrato ou Paisagem): Cabeçalho "QUANTIDADE | ESPÉCIE | MARCA | NUMERAÇÃO | PESO BRUTO (Kg) | PESO LÍQUIDO (Kg)"
   for (let i = 0; i < lines.length; i++) {
     const lineU = lines[i].toUpperCase();
     const isHeaderVolumesPeso =
@@ -284,7 +387,6 @@ export function parseDanfeText(text) {
       (lineU.includes('QUANTIDADE') && (lineU.includes('ESPECIE') || lineU.includes('ESPÉCIE') || lineU.includes('MARCA') || lineU.includes('NUMERACAO') || lineU.includes('NUMERAÇÃO')));
 
     if (isHeaderVolumesPeso) {
-      // Examina as próximas 1 a 3 linhas abaixo do cabeçalho (antes de DADOS DO PRODUTO)
       for (let j = i + 1; j <= Math.min(lines.length - 1, i + 3); j++) {
         const valLine = lines[j].trim();
         const valLineU = valLine.toUpperCase();
@@ -298,19 +400,15 @@ export function parseDanfeText(text) {
           break;
         }
 
-        // Busca todos os números decimais na linha de valores (ex: ["2,500", "2,500"] ou ["1.250,500", "1.200,000"])
         const decimais = valLine.match(/\d{1,3}(?:\.\d{3})*,\d{1,4}|\d+\.\d{1,4}/g);
         if (decimais && decimais.length > 0) {
           if (!peso) {
-            // Se houver 2 ou mais decimais no final da linha (Peso Bruto e Peso Líquido), o penúltimo é o Peso Bruto
             const candidatoPesoBruto = decimais.length >= 2 ? decimais[decimais.length - 2] : decimais[0];
             peso = normalizarPesoExtraido(candidatoPesoBruto);
           }
 
-          // Verifica se o primeiro número inteiro no início da linha é a QUANTIDADE de volumes (ex: "1 2,500 2,500")
           const intInicio = valLine.match(/^(\d{1,5})\b/);
           if (intInicio && intInicio[1]) {
-            // Garante que esse inteiro inicial não é a parte inteira do próprio decimal de peso
             const primeiroDecimal = decimais[0];
             if (!valLine.startsWith(primeiroDecimal)) {
               qtdVol = intInicio[1];
@@ -318,7 +416,6 @@ export function parseDanfeText(text) {
           }
           break;
         } else {
-          // Caso a linha tenha apenas a quantidade inteira sem peso decimal
           const onlyInt = valLine.match(/^(\d{1,5})(?:\s+[A-ZÇÃÕÁÉÍÓÚ]+)?$/i);
           if (onlyInt && onlyInt[1]) {
             qtdVol = onlyInt[1];
@@ -329,7 +426,7 @@ export function parseDanfeText(text) {
     }
   }
 
-  // 4C. Fallback adicional caso o OCR tenha lido a seção TRANSPORTADOR / VOLUMES e haja padrão "<int> <decimal> <decimal>"
+  // 4C. Fallback seção TRANSPORTADOR / VOLUMES
   if (!peso) {
     const idxTransp = lines.findIndex((l) => /TRANSPORTADOR|VOLUMES\s+TRANSPORTADOS/i.test(l));
     if (idxTransp !== -1) {
@@ -346,7 +443,7 @@ export function parseDanfeText(text) {
     }
   }
 
-  // 4D. Último fallback para número seguido de KG
+  // 4D. Fallback em Dados Adicionais / Informações Complementares (seja no topo ou rodapé)
   if (!peso) {
     const kgMatch = text.match(/(\d{1,3}(?:\.\d{3})*[,\.]\d+)\s*(?:KG|QUILOS)\b/i);
     if (kgMatch) {
@@ -360,7 +457,7 @@ export function parseDanfeText(text) {
     'KRAHENBUHL', 'DELTALAB', 'ALUCEL', 'TRATORCOM', 'UNIMIL', 'BIOCHIMECAL',
     'AZTRA', 'SALARINOX', 'APOLINOX', 'ELEPIRA', 'INOXRIO', 'DIMENSIONAL',
     'RAESA', 'ANASTACIO', 'AÇOFERA', 'ACOFERA', 'SAFETECH', 'DINAMICA',
-    'DINÂMICA', 'NATINALFLEX', 'ENGINSTREL', 'HEXIS', 'LEMAGI', 'MATISA', 'SETORIAL'
+    'DINÂMICA', 'NATINALFLEX', 'ENGINSTREL', 'HEXIS', 'LEMAGI', 'MATISA', 'SETORIAL', 'ESSYSTEM'
   ];
 
   for (const emp of empresasConhecidas) {
@@ -371,13 +468,15 @@ export function parseDanfeText(text) {
   }
 
   if (!empresa) {
-    // No padrão SEFAZ, o nome do emitente fica nas primeiras linhas logo abaixo de "IDENTIFICAÇÃO DO EMITENTE"
-    // e antes do endereço (RUA, AV, RODOVIA, CEP, FONE, NATUREZA DE OPERAÇÃO)
     const partesEmitente = [];
-    for (let i = 0; i < Math.min(lines.length, 8); i++) {
+    for (let i = 0; i < Math.min(lines.length, 10); i++) {
       let l = lines[i].toUpperCase().trim();
 
-      // Remove ruídos das colunas da direita (DANFE / DOCUMENTO AUXILIAR / CHAVE DE ACESSO)
+      // Se a nota tiver Dados Adicionais no topo, pula as linhas de Dados Adicionais até achar o Emitente
+      if (/DADOS\s+ADICIONAIS|INFORMA[ÇC][ÕO]ES\s+COMPLEMENTARES|RESERVADO\s+AO\s+FISCO/i.test(l)) {
+        continue;
+      }
+
       l = l
         .replace(/IDENTIFICA[ÇC][ÃA]O\s+DO\s+EMITENTE/g, '')
         .replace(/DOCUMENTO\s+AUXILIAR.*/g, '')
@@ -393,7 +492,6 @@ export function parseDanfeText(text) {
 
       if (!l || l.length < 3) continue;
 
-      // Para quando encontrar linha de endereço ou natureza da operação
       if (
         /^(RUA|AV\.?|AVENIDA|ROD\.?|RODOVIA|ESTRADA|ALAMEDA|PRA[ÇC]A|CEP|TEL|FONE|NATUREZA\s+DE\s+OPERA)/i.test(l) ||
         /\bCEP\s*[:\-]?\s*\d{5}/i.test(l)
@@ -426,26 +524,21 @@ export function parseDanfeText(text) {
   }
 
   if (!destino) {
-    // No padrão SEFAZ, abaixo de "DESTINATÁRIO / REMETENTE" -> "NOME / RAZÃO SOCIAL   CNPJ/CPF   DATA DA EMISSÃO"
-    // a linha seguinte traz: "<RAZÃO SOCIAL DO DESTINATÁRIO> <CNPJ/CPF> <DATA>"
     for (let i = 0; i < lines.length; i++) {
       const lU = lines[i].toUpperCase();
       if (lU.includes('DESTINATÁRIO') || lU.includes('DESTINATARIO') || (lU.includes('NOME') && lU.includes('RAZ') && lU.includes('SOCIAL'))) {
-        // Verifica se a própria linha já tem o nome após ":" (layout simplificado)
         const sameLineMatch = lines[i].match(/(?:NOME\s*\/\s*RAZ[ÃA]O\s+SOCIAL|DESTINAT[ÁA]RIO(?:\s*\/\s*REMETENTE)?)\s*[:\-]\s*(.+)/i);
         if (sameLineMatch && sameLineMatch[1] && !/CNPJ|CPF|DATA/i.test(sameLineMatch[1])) {
           destino = sameLineMatch[1].trim().toUpperCase();
           break;
         }
 
-        // Caso padrão SEFAZ: olha a próxima linha que não seja o cabeçalho "NOME / RAZÃO SOCIAL"
         for (let j = i + 1; j <= Math.min(lines.length - 1, i + 2); j++) {
           const cand = lines[j].trim();
           const candU = cand.toUpperCase();
           if (candU.includes('NOME') && candU.includes('SOCIAL')) continue;
           if (candU.startsWith('ENDEREÇO') || candU.startsWith('ENDERECO')) break;
 
-          // Remove CNPJ/CPF e Data do final da linha
           const limpo = cand
             .replace(/\b\d{2}[\.\s]?\d{3}[\.\s]?\d{3}[\/\s]?\d{4}[\-\s]?\d{2}\b.*/g, '')
             .replace(/\b\d{3}[\.\s]?\d{3}[\.\s]?\d{3}[\-\s]?\d{2}\b.*/g, '')
