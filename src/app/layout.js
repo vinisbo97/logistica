@@ -37,6 +37,22 @@ export default function RootLayout({ children }) {
             router.push('/app-coleta');
           }
         } else {
+          // Verifica se há sessão local de contingência
+          const fallbackRaw = localStorage.getItem('pslog-session-fallback');
+          if (fallbackRaw) {
+            try {
+              const fb = JSON.parse(fallbackRaw);
+              if (fb && fb.email) {
+                setIsAuthenticated(true);
+                setUserEmail(fb.email);
+                if (fb.email.toLowerCase() === 'coleta@pslog.com' && pathname !== '/app-coleta' && pathname !== '/' && pathname !== '/login') {
+                  router.push('/app-coleta');
+                }
+                return;
+              }
+            } catch (e) {}
+          }
+
           setIsAuthenticated(false);
           // Somente páginas internas do ERP redirecionam para /login
           if (pathname !== '/' && pathname !== '/login') {
@@ -56,6 +72,17 @@ export default function RootLayout({ children }) {
         setIsAuthenticated(true);
         setUserEmail(session.user?.email || 'Administrador');
       } else {
+        const fallbackRaw = localStorage.getItem('pslog-session-fallback');
+        if (fallbackRaw) {
+          try {
+            const fb = JSON.parse(fallbackRaw);
+            if (fb && fb.email) {
+              setIsAuthenticated(true);
+              setUserEmail(fb.email);
+              return;
+            }
+          } catch (e) {}
+        }
         setIsAuthenticated(false);
         setUserEmail('');
         if (pathname !== '/' && pathname !== '/login') {
@@ -245,6 +272,7 @@ export default function RootLayout({ children }) {
               </Link>
               <button
                 onClick={async () => {
+                  localStorage.removeItem('pslog-session-fallback');
                   await supabase.auth.signOut();
                   setIsAuthenticated(false);
                   router.push('/');

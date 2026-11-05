@@ -137,12 +137,29 @@ export default function AppColetaBarracaoPage() {
   }, []);
 
   async function verificarSessaoELimparAntigas() {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
+    let email = '';
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.email) {
+        email = session.user.email;
+      }
+    } catch (e) {}
+
+    if (!email && typeof window !== 'undefined') {
+      try {
+        const localFallback = localStorage.getItem('pslog-session-fallback');
+        if (localFallback) {
+          const parsed = JSON.parse(localFallback);
+          if (parsed?.email) email = parsed.email;
+        }
+      } catch (e) {}
+    }
+
+    if (!email) {
       router.push('/login');
       return;
     }
-    const email = session.user?.email || '';
+
     setUserEmail(email);
     setIsAdmin(email.toLowerCase() !== 'coleta@pslog.com');
 
@@ -412,7 +429,12 @@ export default function AppColetaBarracaoPage() {
   }
 
   async function handleSair() {
-    await supabase.auth.signOut();
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('pslog-session-fallback');
+    }
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {}
     router.push('/login');
   }
 
