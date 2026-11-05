@@ -547,35 +547,316 @@ export default function PlanilhaGmaxPage() {
     return { preenchidas, coletas, transbordos, volumes, pesoTotal, valorTotal };
   }, [linhas]);
 
-  function exportarPlanilhaExcelGmax() {
-    const nomeArquivo = `${semanaAtiva.replace(/[^a-zA-Z0-9\s\-]/g, '').trim()}.csv`;
-    const csvRows = [];
-    csvRows.push(',,,,,,,,,,,,');
-    csvRows.push(`,TIPO DO SERVIÇO,${semanaAtiva},,,,,,,,,,`);
-    csvRows.push(',,EMPRESA,Nº NF,QTD VOLUME,,PESO,,DATA,ORIGEM,COLETOR,DESTINO,VALOR');
+  async function exportarPlanilhaExcelGmax() {
+    try {
+      const ExcelJSImport = await import('exceljs');
+      const ExcelJS = ExcelJSImport.default || ExcelJSImport;
+      const wb = new ExcelJS.Workbook();
+      wb.creator = 'PsLog ERP';
+      wb.created = new Date();
 
-    linhas.forEach((r, idx) => {
-      if (r.empresa || r.nf || r.valor) {
-        const pesoFmt = String(r.peso || '').replace('.', ',');
-        const valFmt = r.valor ? String(r.valor).replace('.', ',') : '';
-        csvRows.push(
-          `${r.seq || idx + 1},${r.tipo},${r.empresa},${r.nf},${r.qtd_vol},${r.unid_vol},${pesoFmt},${r.unid_peso},${r.data},${r.origem},${r.coletor},${r.destino},${valFmt}`
-        );
+      const ws = wb.addWorksheet('COLETAS GMAX', {
+        views: [{ showGridLines: true }]
+      });
+
+      // As 13 colunas exatas da tela de preenchimento (SEM a coluna FOTO NF)
+      ws.columns = [
+        { key: 'seq', width: 6 },
+        { key: 'tipo', width: 18 },
+        { key: 'empresa', width: 34 },
+        { key: 'nf', width: 15 },
+        { key: 'qtd_vol', width: 11 },
+        { key: 'unid_vol', width: 8 },
+        { key: 'peso', width: 14 },
+        { key: 'unid_peso', width: 8 },
+        { key: 'data', width: 14 },
+        { key: 'origem', width: 22 },
+        { key: 'coletor', width: 14 },
+        { key: 'destino', width: 32 },
+        { key: 'valor', width: 18 }
+      ];
+
+      const thinBorder = {
+        top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+        left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+        bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+        right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
+      };
+
+      const headerBorder = {
+        top: { style: 'medium', color: { argb: 'FF94A3B8' } },
+        left: { style: 'thin', color: { argb: 'FF94A3B8' } },
+        bottom: { style: 'medium', color: { argb: 'FF94A3B8' } },
+        right: { style: 'thin', color: { argb: 'FF94A3B8' } }
+      };
+
+      // LINHA 1: Cabeçalho Verde Principal idêntico ao topo da tela
+      ws.mergeCells('A1:M1');
+      const titleRow = ws.getRow(1);
+      titleRow.height = 32;
+      const titleCell = ws.getCell('A1');
+      titleCell.value = semanaAtiva;
+      titleCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF107C41' }
+      };
+      titleCell.font = {
+        name: 'Calibri',
+        size: 16,
+        bold: true,
+        color: { argb: 'FFFFFFFF' }
+      };
+      titleCell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+
+      // LINHA 2: Faixa de Resumo idêntica aos cartões superiores da tela
+      const summaryRow = ws.getRow(2);
+      summaryRow.height = 24;
+      ws.mergeCells('A2:B2');
+      ws.getCell('A2').value = `NOTAS NA SEMANA: ${totais.preenchidas}`;
+      ws.mergeCells('C2:D2');
+      ws.getCell('C2').value = `COLETAS (LUIZ): ${totais.coletas}  |  TRANSBORDOS: ${totais.transbordos}`;
+      ws.mergeCells('E2:F2');
+      ws.getCell('E2').value = `VOLUMES: ${totais.volumes} VOL`;
+      ws.mergeCells('G2:I2');
+      ws.getCell('G2').value = `PESO TOTAL: ${totais.pesoTotal.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} KG`;
+      ws.mergeCells('J2:M2');
+      ws.getCell('J2').value = `TOTAL A RECEBER GMAX: R$ ${totais.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+
+      for (let c = 1; c <= 13; c++) {
+        const cell = summaryRow.getCell(c);
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: c >= 10 ? 'FF059669' : 'FFF8FAFC' }
+        };
+        cell.font = {
+          name: 'Calibri',
+          size: 10,
+          bold: true,
+          color: { argb: c >= 10 ? 'FFFFFFFF' : 'FF1E293B' }
+        };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        cell.border = thinBorder;
       }
-    });
 
-    csvRows.push(',,,,,,,,,,,,');
-    csvRows.push(`,,,,,,,,,,,TOTAL A RECEBER R$,${totais.valorTotal}`);
+      // LINHA 3: Cabeçalhos das 13 Colunas da Grade (sem FOTO NF)
+      const headers = [
+        '#',
+        'TIPO DO SERVIÇO',
+        'EMPRESA',
+        'Nº NF',
+        'QTD VOL',
+        'UNID',
+        'PESO',
+        'UNID',
+        'DATA',
+        'ORIGEM',
+        'COLETOR',
+        'DESTINO',
+        'VALOR (R$)'
+      ];
+      const headerRow = ws.getRow(3);
+      headerRow.height = 26;
+      headers.forEach((h, i) => {
+        const cell = headerRow.getCell(i + 1);
+        cell.value = h;
+        const isValorCol = i === 12;
+        const isSeqCol = i === 0;
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: {
+            argb: isValorCol ? 'FFD1FAE5' : isSeqCol ? 'FFCBD5E1' : 'FFE2E8F0'
+          }
+        };
+        cell.font = {
+          name: 'Calibri',
+          size: 10,
+          bold: true,
+          color: { argb: isValorCol ? 'FF065F46' : 'FF334155' }
+        };
+        cell.alignment = {
+          vertical: 'middle',
+          horizontal: i === 2 || i === 9 || i === 11 ? 'left' : isValorCol ? 'right' : 'center'
+        };
+        cell.border = headerBorder;
+      });
 
-    const blob = new Blob(['\uFEFF' + csvRows.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', nomeArquivo);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    notificar('success', `Planilha baixada: ${nomeArquivo}`);
+      // LINHAS DE DADOS: Exporta todas as linhas da grade de preenchimento mantendo o mesmo desenho
+      linhas.forEach((r, idx) => {
+        const rowNum = 4 + idx;
+        const row = ws.getRow(rowNum);
+        row.height = 21;
+
+        const temDados = Boolean(r.empresa || r.nf || r.valor);
+        const dataFormatada = r.data
+          ? r.data.includes('-')
+            ? r.data.split('-').reverse().join('/')
+            : r.data
+          : '';
+
+        const pesoNum =
+          r.peso !== undefined && r.peso !== ''
+            ? parseFloat(String(r.peso).replace(/\./g, '').replace(',', '.'))
+            : null;
+
+        const valorNum =
+          r.valor !== undefined && r.valor !== ''
+            ? parseFloat(String(r.valor).replace(',', '.'))
+            : null;
+
+        const qtdVolNum =
+          temDados && r.qtd_vol !== undefined && r.qtd_vol !== ''
+            ? parseInt(String(r.qtd_vol), 10) || 1
+            : temDados
+            ? 1
+            : 1;
+
+        const valoresLinha = [
+          r.seq !== undefined ? Number(r.seq) || idx + 1 : idx + 1,
+          r.tipo || 'COLETA',
+          temDados ? (r.empresa || '').toUpperCase() : '',
+          temDados ? r.nf || '' : '',
+          qtdVolNum,
+          r.unid_vol || 'VOL',
+          temDados && pesoNum !== null && !isNaN(pesoNum) ? pesoNum : temDados ? r.peso || '' : '',
+          r.unid_peso || 'KG',
+          dataFormatada,
+          (r.origem || 'PIRACICABA').toUpperCase(),
+          (r.coletor || 'LUIZ').toUpperCase(),
+          temDados ? (r.destino || '').toUpperCase() : '',
+          temDados && valorNum !== null && !isNaN(valorNum) ? valorNum : null
+        ];
+
+        valoresLinha.forEach((val, colIdx) => {
+          const cell = row.getCell(colIdx + 1);
+          cell.value = val;
+          cell.border = thinBorder;
+
+          const isTransbordo = (r.tipo || 'COLETA') === 'TRANSBORDO';
+          if (colIdx === 0 || colIdx === 5 || colIdx === 7) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+          } else if (colIdx === 12) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFECFDF5' } };
+          } else if (isTransbordo) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFAF5FF' } };
+          } else {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
+          }
+
+          // Fontes e cores de cada coluna idênticas à tela
+          if (colIdx === 0) {
+            cell.font = { name: 'Consolas', size: 10, bold: true, color: { argb: 'FF64748B' } };
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          } else if (colIdx === 1) {
+            cell.font = {
+              name: 'Calibri',
+              size: 10,
+              bold: true,
+              color: { argb: isTransbordo ? 'FF9333EA' : 'FF2563EB' }
+            };
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          } else if (colIdx === 2) {
+            cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+            cell.alignment = { vertical: 'middle', horizontal: 'left' };
+          } else if (colIdx === 3) {
+            cell.font = { name: 'Consolas', size: 10, bold: true, color: { argb: 'FF1E293B' } };
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          } else if (colIdx === 4) {
+            cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          } else if (colIdx === 5 || colIdx === 7) {
+            cell.font = { name: 'Consolas', size: 9, bold: true, color: { argb: 'FF94A3B8' } };
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          } else if (colIdx === 6) {
+            cell.font = { name: 'Consolas', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+            cell.alignment = { vertical: 'middle', horizontal: 'right' };
+            if (typeof val === 'number') {
+              cell.numFmt = '#,##0.000';
+            }
+          } else if (colIdx === 8) {
+            cell.font = { name: 'Consolas', size: 10, color: { argb: 'FF334155' } };
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          } else if (colIdx === 9) {
+            cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+            cell.alignment = { vertical: 'middle', horizontal: 'left' };
+          } else if (colIdx === 10) {
+            cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          } else if (colIdx === 11) {
+            cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF334155' } };
+            cell.alignment = { vertical: 'middle', horizontal: 'left' };
+          } else if (colIdx === 12) {
+            cell.font = { name: 'Consolas', size: 11, bold: true, color: { argb: 'FF047857' } };
+            cell.alignment = { vertical: 'middle', horizontal: 'right' };
+            cell.numFmt = '"R$" #,##0.00';
+          }
+        });
+      });
+
+      // LINHA DE RODAPÉ (TOTAL GERAL idêntico à barra inferior escura da tela)
+      const lastDataRow = 3 + linhas.length;
+      const footRowNum = lastDataRow + 1;
+      const footRow = ws.getRow(footRowNum);
+      footRow.height = 28;
+
+      ws.mergeCells(`A${footRowNum}:D${footRowNum}`);
+      ws.getCell(`A${footRowNum}`).value = `TOTAL GERAL (${totais.preenchidas} NOTAS NA SEMANA)`;
+      ws.getCell(`E${footRowNum}`).value = totais.volumes;
+      ws.getCell(`F${footRowNum}`).value = 'VOL';
+      ws.getCell(`G${footRowNum}`).value = totais.pesoTotal;
+      ws.getCell(`G${footRowNum}`).numFmt = '#,##0.00';
+      ws.getCell(`H${footRowNum}`).value = 'KG';
+      ws.mergeCells(`I${footRowNum}:L${footRowNum}`);
+      ws.getCell(`I${footRowNum}`).value = 'TOTAL A RECEBER R$:';
+      ws.getCell(`M${footRowNum}`).value = {
+        formula: `SUM(M4:M${lastDataRow})`,
+        result: totais.valorTotal
+      };
+      ws.getCell(`M${footRowNum}`).numFmt = '"R$" #,##0.00';
+
+      for (let c = 1; c <= 13; c++) {
+        const cell = footRow.getCell(c);
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF0F172A' }
+        };
+        cell.font = {
+          name: 'Calibri',
+          size: c === 13 ? 12 : 10,
+          bold: true,
+          color: {
+            argb: c <= 4 ? 'FFFCD34D' : c === 13 ? 'FF34D399' : 'FFFFFFFF'
+          }
+        };
+        cell.alignment = {
+          vertical: 'middle',
+          horizontal: c <= 4 ? 'left' : c >= 9 ? 'right' : 'center'
+        };
+        cell.border = headerBorder;
+      }
+
+      const buffer = await wb.xlsx.writeBuffer();
+      const nomeBase = semanaAtiva.replace(/[\/\\:*?"<>|]/g, '-').trim();
+      const nomeArquivo = `${nomeBase}.xlsx`;
+
+      const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', nomeArquivo);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      notificar('success', `Planilha Excel (.xlsx) baixada com o layout completo: ${nomeArquivo}`);
+    } catch (err) {
+      console.error('Erro ao gerar planilha Excel:', err);
+      notificar('error', 'Erro ao gerar planilha Excel.');
+    }
   }
 
   function gerarPdfGmax() {
@@ -723,7 +1004,7 @@ export default function PlanilhaGmaxPage() {
               onClick={exportarPlanilhaExcelGmax}
               className="px-4 py-2.5 rounded-xl bg-white text-[#107C41] hover:bg-emerald-50 text-xs font-black transition-all shadow-md cursor-pointer flex items-center gap-1.5"
             >
-              📊 Baixar Planilha (.csv)
+              📊 Baixar Planilha Excel (.xlsx)
             </button>
 
             <button
