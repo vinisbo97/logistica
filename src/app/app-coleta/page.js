@@ -267,6 +267,20 @@ export default function AppColetaBarracaoPage() {
     processarFotoTirada(file);
   }
 
+  async function testarComImagemRealDanfe(caminhoImagem) {
+    try {
+      setEtapa('lendo');
+      setProgressoOcr(10);
+      const res = await fetch(caminhoImagem);
+      const blob = await res.blob();
+      await processarFotoTirada(blob);
+    } catch (err) {
+      console.error(err);
+      setEtapa('inicio');
+      alert('Erro ao carregar imagem de teste.');
+    }
+  }
+
   async function processarFotoTirada(fileOrBlob) {
     setEtapa('lendo');
     setProgressoOcr(15);
@@ -502,6 +516,76 @@ export default function AppColetaBarracaoPage() {
               >
                 Abrir visor de câmera ao vivo dentro da tela
               </button>
+            </div>
+
+            {/* SEÇÃO DE IMAGENS DE NF-e PRONTAS PARA SIMULAR E GRAVAR NO BANCO */}
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-extrabold uppercase text-amber-400 block">
+                    🧪 Imagens de NF-e Prontas para Teste Real
+                  </span>
+                  <h3 className="text-sm font-black text-white">
+                    Toque em uma Nota Fiscal abaixo para ler a imagem e gravar no banco:
+                  </h3>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2.5">
+                {[
+                  {
+                    titulo: 'NF-e 152.890 — TRATORCOM (Piracicaba)',
+                    sub: '3 VOL • 85.50 KG • Destino: COOP. AGRICOLA • R$ 50',
+                    img: '/danfe-teste-tratorcom.png'
+                  },
+                  {
+                    titulo: 'NF-e 645.120 — LUITEX (Americana)',
+                    sub: '2 VOL • 24.80 KG • Destino: DA MATA • R$ 50',
+                    img: '/danfe-teste-luitex.png'
+                  },
+                  {
+                    titulo: 'NF-e 32.995 — RAESA (Araras)',
+                    sub: '5 VOL • 142.00 KG • Destino: BARRALCOOL • R$ 110',
+                    img: '/danfe-teste-raesa.png'
+                  }
+                ].map((nfItem) => (
+                  <div
+                    key={nfItem.img}
+                    className="bg-slate-950/80 border border-slate-800 rounded-2xl p-3 flex items-center justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <img
+                        src={nfItem.img}
+                        alt={nfItem.titulo}
+                        onClick={() => setFotoAmpliada(nfItem.img)}
+                        className="w-14 h-11 object-cover rounded-lg border border-slate-700 cursor-pointer shrink-0"
+                        title="Toque para ver a imagem da Nota Fiscal"
+                      />
+                      <div className="min-w-0">
+                        <p className="text-xs font-black text-white truncate">{nfItem.titulo}</p>
+                        <p className="text-[11px] text-slate-400 truncate">{nfItem.sub}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <a
+                        href={nfItem.img}
+                        download
+                        className="px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-[11px] font-bold text-slate-300"
+                        title="Baixar imagem para a galeria"
+                      >
+                        ⬇️
+                      </a>
+                      <button
+                        onClick={() => testarComImagemRealDanfe(nfItem.img)}
+                        className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-black cursor-pointer shadow-sm"
+                      >
+                        🔍 Ler Foto
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* BOTÃO PARA INSTALAR COMO APLICATIVO NA TELA INICIAL DO CELULAR */}
